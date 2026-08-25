@@ -15,7 +15,7 @@ export function InlineEdit({
   className = "",
 }: {
   value: string;
-  onSave: (value: string) => Promise<void> | void;
+  onSave: (value: string) => Promise<unknown> | void;
   placeholder?: string;
   multiline?: boolean;
   className?: string;
