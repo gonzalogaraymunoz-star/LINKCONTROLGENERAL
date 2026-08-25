@@ -1,9 +1,19 @@
+import type { NextRequest } from "next/server";
 import { createLinkMcpHandler } from "@/lib/mcp/handler";
+import { validateMcpAccessToken } from "@/lib/mcp/access";
 
 export const maxDuration = 60;
 const handler = createLinkMcpHandler("root");
-export { handler as GET, handler as POST };
 
+async function securedHandler(request: NextRequest) {
+  const token = request.nextUrl.searchParams.get("access");
+  if (!validateMcpAccessToken("root", token)) {
+    return Response.json({ error: "mcp_access_denied" }, { status: 401 });
+  }
+  return handler(request);
+}
+
+export { securedHandler as GET, securedHandler as POST };
 
 export function OPTIONS() {
   return new Response(null, {
