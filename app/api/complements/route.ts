@@ -4,19 +4,26 @@ import { getCentralSupabase } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 function complementSetup(input: { name: string; description: string; endpoint: string; scope: string }) {
+  const simpleTokenConfigured = Boolean((process.env.LINK_MCP_TOKEN || "").trim());
+
   return {
     name: input.name,
     description: input.description,
     connectionMode: "server_url",
     serverUrl: input.endpoint,
+    serverUrlFormat: `${input.endpoint}?mcp_token=TU_LINK_MCP_TOKEN`,
     authentication: {
-      state: "pending",
-      recommendedSelection: null,
-      label: "Autenticación privada pendiente",
-      detail: "La ruta MCP ya existe y está protegida, pero todavía no expone OAuth para ChatGPT. No selecciones OAuth hasta que CONTROL CENTRAL marque esta configuración como Lista para crear.",
+      state: simpleTokenConfigured ? "ready" : "missing_token",
+      recommendedSelection: "Sin autenticación",
+      label: simpleTokenConfigured ? "Protocolo simple LINK listo" : "Falta LINK_MCP_TOKEN en Vercel",
+      detail: simpleTokenConfigured
+        ? "Usa la URL del servidor agregando ?mcp_token=TU_LINK_MCP_TOKEN y selecciona Sin autenticación en ChatGPT. El token nunca se expone desde este dashboard."
+        : "Configura LINK_MCP_TOKEN como secreto de Vercel. Después usa la URL agregando ?mcp_token=TU_LINK_MCP_TOKEN y selecciona Sin autenticación en ChatGPT.",
+      tokenEnvironmentVariable: "LINK_MCP_TOKEN",
+      tokenTransport: "query:mcp_token (fallback para clientes sin headers); también acepta x-link-mcp-token",
     },
     scope: input.scope,
-    readyToCreate: false,
+    readyToCreate: simpleTokenConfigured,
   };
 }
 
@@ -51,8 +58,8 @@ export async function GET(request: NextRequest) {
       panelUrl: `${origin}/c/${client.slug}`,
       mcpEndpoint: endpoint,
       dataSource: "Supabase · LINK CONTROL CENTRAL",
-      mode: "live-read-protected",
-      accessState: "authentication_required",
+      mode: "live-protected",
+      accessState: "link_mcp_token",
       setup: complementSetup({
         name: `LINK CONTROL — ${client.name}`,
         description: `Control de negocio de ${client.name}, gobernado por LINK CONTROL CENTRAL. Consulta únicamente información y capacidades autorizadas para este negocio.`,
@@ -73,9 +80,9 @@ export async function GET(request: NextRequest) {
       panelUrl: origin,
       mcpEndpoint: centralEndpoint,
       dataSource: "Supabase · LINK CONTROL CENTRAL",
-      mode: "live-read-protected",
-      accessState: "authentication_required",
-      writeStatus: "blocked-until-authenticated-authorization",
+      mode: "live-protected",
+      accessState: "link_mcp_token",
+      writeStatus: "governed-by-tool-annotations-and-gateway",
       setup: complementSetup({
         name: "LINK CONTROL CENTRAL",
         description: "Centro de mando del ecosistema LINK. Consulta clientes, trabajo, actividad y controles autorizados desde una sola conexión MCP.",
@@ -88,9 +95,9 @@ export async function GET(request: NextRequest) {
     protocol: {
       transport: "Remote MCP over HTTPS",
       endpointRule: "Central uses /mcp. Scoped Controls use /c/<client-slug>/mcp.",
-      readMode: "Live Supabase data; MCP route is protected and requires an authenticated access layer before distribution",
-      writeMode: "Disabled until OAuth / authenticated authorization is implemented",
-      setupRule: "The dashboard is the canonical source for ChatGPT complement setup. A complement must not be created while readyToCreate is false.",
+      authentication: "Simple LINK token. ChatGPT selection: Sin autenticación. URL fallback: ?mcp_token=...",
+      oauth: "Optional stronger mode retained for future rollout; not required for initial connection.",
+      setupRule: "The dashboard is the canonical source for ChatGPT complement setup. Never expose LINK_MCP_TOKEN from a public API response.",
     },
   });
 }
