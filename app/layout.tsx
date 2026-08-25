@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./pro.css";
 import "./complements.css";
+import "./operational.css";
 
 export const metadata: Metadata = {
   title: "LINK CONTROL CENTRAL",
