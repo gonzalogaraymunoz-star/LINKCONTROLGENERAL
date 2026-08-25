@@ -1,157 +1,94 @@
 # LINK CONTROL CENTRAL
 
-**v0.2 — primer commit recomendado**
+## Regla principal — NO FAKE UI
 
-Centro de control multi-negocio para gobernar CRM, memoria, inteligencia, artifacts, tareas, gestos, calendario, infraestructura y conexiones ChatGPT/MCP del ecosistema LINK.
+**Si una función no ejecuta su trabajo real de principio a fin, no aparece en la interfaz.**
 
-## Decisión de arquitectura real
-Este repo **NO requiere crear un Supabase nuevo**.
+Esto significa:
 
-Se aprovechan los dos proyectos Free que ya existen:
+- no mostrar datos inventados como si fueran reales;
+- no mostrar estados de conexión simulados;
+- no publicar botones que solo hagan `alert`, cambien el DOM o guarden en `localStorage` cuando la acción debería persistirse;
+- no publicar un panel futuro hasta que tenga fuente de verdad, permisos, persistencia y resultado verificable;
+- si el backend no está conectado, la app debe decirlo claramente y no rellenar la pantalla con mocks.
 
-1. **LINK PREVIEW → LINK CONTROL CENTRAL**  
-   Central Data Plane: controls/scopes, CRM, Preview Studio, memoria, inteligencia, artifacts, Event Bus y permisos.
-2. **gonzalogaraymunoz-star's Project → Operational Data Plane**  
-   Operación especializada: Hotel Experience/turismo, reservas, proveedores, servicios, pagos, comisiones, políticas y postventa.
+Contrato mínimo de una funcionalidad visible:
 
-Los nuevos negocios/clientes **no crean un proyecto Supabase por cabeza**. Se crean como `controls` con `control_id + membership + RLS` dentro de LINK PREVIEW.
+`entrada real → validación → ejecución → persistencia → actualización de interfaz → evento/auditoría cuando corresponda`
 
-Lee primero:
-- `docs/SUPABASE_EXISTING_PROJECTS.md`
-- `docs/FREE_ARCHITECTURE.md`
-- `docs/CONSTITUTION.md`
-- `docs/STRATEGY.md`
+## v0.3 — Operational Core
 
-## Qué conserva de LINK PREVIEW
-La migration v0.2 es **aditiva**. No reemplaza:
+La app se reduce temporalmente a cuatro superficies que pueden trabajar con el backend real:
+
+1. **Clientes** — necesidad, producto, etapa, acciones, tareas y gestos.
+2. **Trabajo** — Kanban calculado desde ciclos y `work_items` reales.
+3. **Calendario** — solo trabajo con `due_at` real.
+4. **Actividad** — eventos reales del backend.
+
+Las capacidades futuras — Gateways, Infraestructura, Controles hijos, Inteligencia, Productos, Explorador y ChatGPT integrado — permanecen en arquitectura y documentación, pero **no vuelven a la UI hasta completar su conexión real**.
+
+## Backend central
+
+Proyecto Supabase central existente:
+
+`https://zgbnjlrxzvzpigmwidsp.supabase.co`
+
+Tablas operacionales actuales:
 
 - `clients`
-- `projects`
-- `design_previews`
-- `previews`
-- `agent_sessions`
-- `agent_messages`
-- `agent_memories`
-- `requests`
-- `commitments`
-- `deliverables`
-- `activity_log`
-- ni el resto de la estructura actual de Preview Studio.
+- `needs`
+- `products`
+- `client_cycles`
+- `work_items`
+- `events`
 
-`agent_memories` pasa a ser la memoria local/proyecto canónica y recibe `control_id`, scope, evidencia, confianza y estado de promoción.
+API de la app:
+
+- `GET /api/central` — lee estado operacional real.
+- `POST /api/central` — crea/actualiza clientes, ciclos, necesidades, productos y trabajo.
+
+## Arquitectura gratuita
+
+Se conservan dos proyectos Supabase Free:
+
+1. **LINK CONTROL CENTRAL** — CRM, controles/scopes, memoria, Preview Studio, inteligencia, artifacts y Event Bus.
+2. **Operational Data Plane** — Hotel Experience/turismo, reservas, proveedores, servicios, pagos, comisiones, políticas y postventa.
+
+Los nuevos negocios/clientes no requieren otro proyecto Supabase: se modelan mediante `control_id + membership + RLS` cuando el aislamiento multi-tenant esté implementado y verificado.
 
 ## Stack
+
 - Next.js 16
 - React 19
 - TypeScript
 - Supabase JS
-- MCP (`mcp-handler`)
 - Vercel
 - GitHub como fuente de verdad
 
-> Node.js 22+.
+## Desarrollo
 
-## Arranque local
 ```bash
 cp .env.example .env.local
 npm install
 npm run dev
 ```
 
-Sin credenciales funciona en modo demo.
+La `SUPABASE_SERVICE_ROLE_KEY` solo vive en servidor/Vercel. Nunca debe llegar al navegador ni al repositorio.
 
-## Primer commit
-```bash
-git init
-git add .
-git commit -m "feat: bootstrap LINK CONTROL CENTRAL v0.2"
-git branch -M main
-git remote add origin https://github.com/TU-USUARIO/link-control-central.git
-git push -u origin main
-```
+## Constitución
 
-## Deploy en Vercel
-1. Importa el repo.
-2. Next.js se detecta automáticamente.
-3. Deploy inicial sin variables: modo demo.
-4. Luego configura las variables de `.env.example` para **LINK PREVIEW** como Central.
-5. El Supabase operacional se configura solo cuando implementemos su Gateway server-side.
+Lee `docs/CONSTITUTION.md`. La regla **No Fake UI** forma parte de la Constitución Técnica desde v1.1.
 
-## Supabase — orden correcto
-### Fase A: evolucionar LINK PREVIEW
-Conecta Supabase CLI al proyecto **LINK PREVIEW** y aplica:
+## Próxima prioridad
 
-```text
-supabase/migrations/0001_upgrade_link_preview_to_control.sql
-```
+No agregar otra pantalla. Primero verificar en producción:
 
-Esta migration:
-- crea el árbol `controls`;
-- añade `control_id` a las entidades centrales existentes;
-- conserva Preview Studio;
-- evoluciona `agent_memories`;
-- agrega Need/Product/6 etapas/Work Items;
-- agrega Explorer/Artifacts;
-- agrega Intelligence/Gateways/Event Bus.
+1. carga real de `/api/central`;
+2. crear cliente y ciclo;
+3. editar necesidad/producto/hito;
+4. crear acción/tarea/gesto;
+5. completar trabajo y recalcular progreso;
+6. avanzar etapa;
+7. ver el evento real en Actividad.
 
-### Fase B: Auth antes de aislar clientes
-Después:
-1. autentica al administrador root;
-2. crea `actor` + `control_membership=root_admin`;
-3. verifica acceso;
-4. aplica:
-
-```text
-supabase/migrations/0002_harden_existing_rls_after_auth.sql
-```
-
-**No ejecutes 0002 antes de tener el root humano configurado.**
-
-## ChatGPT / MCP
-- Central: `/mcp`
-- Control hijo: `/c/[scope]/mcp`
-- Panel hijo: `/c/[scope]`
-
-Ejemplos:
-- `/c/link_empresa/mcp`
-- `/c/lama/mcp`
-- `/c/hotel_experience/mcp`
-- `/c/link_cupones/mcp`
-
-La URL aporta el scope inicial; **no sustituye autenticación**.
-
-## Principio técnico
-Toda acción externa resuelve:
-
-`identidad → control → scope → política → gateway → ejecución → evento`.
-
-ChatGPT, GitHub, Vercel, Google, Supabase operacional y partners son adaptadores alrededor del núcleo, no partes que puedan reescribirlo.
-
-## Carpetas clave
-```text
-app/                    UI + rutas API/MCP
-components/             Workspace LINK CONTROL
-lib/crm/                6 etapas LINK
-lib/gateway/            políticas + eventos
-lib/memory/             reglas de memoria
-lib/supabase/           Central + Operational clients
-supabase/migrations/    upgrade aditivo + hardening RLS
-docs/                   Constitución y estrategia
-```
-
-## Validación
-```bash
-npm run validate:repo
-npm run typecheck
-npm run build
-```
-
-## Próximo commit después del bootstrap
-No agregar más pantallas todavía. El siguiente commit debe conectar **LINK PREVIEW real en modo lectura** y verificar:
-- controls;
-- clients;
-- projects;
-- agent_memories;
-- design_previews;
-- artifacts;
-- health.
+Solo después de que ese recorrido funcione de extremo a extremo se habilita la siguiente capacidad.
