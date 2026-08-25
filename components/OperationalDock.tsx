@@ -2,10 +2,11 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { Sheet } from "@/components/ui/LinkPrimitives";
+import ComplementSetupPanel, { type ComplementSetup } from "@/components/ComplementSetupPanel";
 
 type ServicePlan = { id: string; name: string; description?: string | null };
-type Complement = { name: string; scope: string; panelUrl: string; mcpEndpoint: string; mode: string; stage?: string | null; progress?: number };
-type Registry = { ok: boolean; central: Complement; controls: Complement[]; tools: string[]; protocol: { transport: string; endpointRule: string; readMode: string; writeMode: string } };
+type Complement = { name: string; scope: string; panelUrl: string; mcpEndpoint: string; mode: string; stage?: string | null; progress?: number; setup?: ComplementSetup };
+type Registry = { ok: boolean; central: Complement; controls: Complement[]; tools: string[]; protocol: { transport: string; endpointRule: string; readMode: string; writeMode: string; setupRule?: string } };
 
 export default function OperationalDock() {
   const [clientOpen, setClientOpen] = useState(false);
@@ -38,12 +39,12 @@ export default function OperationalDock() {
     <>
       <div className="operationalDock">
         <button className="dockAction primary" onClick={() => setClientOpen(true)}><span>＋</span><div><strong>Cliente</strong><small>Plan + estrategia</small></div></button>
-        <button className="dockAction" onClick={() => setChatOpen(true)}><span>✦</span><div><strong>ChatGPT</strong><small>Protocolo MCP</small></div></button>
+        <button className="dockAction" onClick={() => setChatOpen(true)}><span>✦</span><div><strong>ChatGPT</strong><small>Crear complemento</small></div></button>
       </div>
       {notice ? <div className="dockNotice">{notice}</div> : null}
 
       <RealClientSheet open={clientOpen} onOpenChange={setClientOpen} plans={plans} onDone={(message) => { setNotice(message); window.setTimeout(() => window.location.reload(), 450); }} />
-      <ChatGPTProtocolSheet open={chatOpen} onOpenChange={setChatOpen} registry={registry} onCopy={() => setNotice("Ruta copiada")} />
+      <ChatGPTProtocolSheet open={chatOpen} onOpenChange={setChatOpen} registry={registry} onCopy={() => setNotice("Dato copiado")} />
     </>
   );
 }
@@ -122,18 +123,20 @@ function ChatGPTProtocolSheet({ open, onOpenChange, registry, onCopy }: { open: 
   const centralRoute = registry?.central?.mcpEndpoint || "/mcp";
   async function copy(value: string) { await navigator.clipboard.writeText(value); onCopy(); }
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title="ChatGPT" description="Protocolo oficial de LINK CONTROL para conectar ChatGPT mediante MCP.">
+    <Sheet open={open} onOpenChange={onOpenChange} title="ChatGPT" description="Datos oficiales para crear y administrar el complemento MCP de LINK CONTROL.">
       <div className="chatProtocol">
         <section className="protocolStatus">
           <div><span className="statusDot ok" /><div><strong>Supabase</strong><small>Datos reales conectados</small></div></div>
           <div><span className="statusDot ok" /><div><strong>MCP</strong><small>Servidor remoto construido</small></div></div>
-          <div><span className="statusDot warn" /><div><strong>Autorización</strong><small>Pendiente antes de entregar acceso privado</small></div></div>
+          <div><span className="statusDot warn" /><div><strong>Autorización</strong><small>Pendiente antes de crear el complemento</small></div></div>
           <div><span className="statusDot off" /><div><strong>Escritura desde ChatGPT</strong><small>Bloqueada hasta autenticar usuario y scope</small></div></div>
         </section>
 
+        {registry?.central?.setup ? <ComplementSetupPanel title="Complemento raíz" setup={registry.central.setup} onCopy={onCopy} /> : null}
+
         <section className="protocolCard"><span className="protocolNumber">01</span><div><strong>ChatGPT identifica al usuario</strong><p>El usuario debe estar autenticado en LINK CONTROL. Su membresía determina qué Control puede utilizar.</p></div></section>
         <section className="protocolCard"><span className="protocolNumber">02</span><div><strong>LINK resuelve el scope</strong><p>Central usa <code>/mcp</code>. Cada cliente usa <code>/c/&lt;slug&gt;/mcp</code>. Nunca se entrega la service role de Supabase.</p></div></section>
-        <section className="protocolCard"><span className="protocolNumber">03</span><div><strong>Se registra la app MCP en ChatGPT</strong><p>En un workspace/plan compatible se habilita Developer Mode, se crea la app personalizada y se registra la URL HTTPS autorizada.</p></div></section>
+        <section className="protocolCard"><span className="protocolNumber">03</span><div><strong>Se registra la app MCP en ChatGPT</strong><p>Cuando la tarjeta superior marque “Listo para crear”, copia esos campos exactamente en la ventana Nuevo complemento.</p></div></section>
         <section className="protocolCard"><span className="protocolNumber">04</span><div><strong>Prueba de conexión</strong><p>Primero <code>get_scope</code>, después <code>health</code>. Luego ChatGPT puede consultar clientes, ficha 360, trabajo y actividad.</p></div></section>
         <section className="protocolCard"><span className="protocolNumber">05</span><div><strong>Escritura</strong><p>Solo se habilita después de OAuth/autorización por usuario y Control. Cada cambio debe persistir en Supabase y crear un evento.</p></div></section>
 
@@ -144,7 +147,7 @@ function ChatGPTProtocolSheet({ open, onOpenChange, registry, onCopy }: { open: 
           {(registry?.controls || []).map(item => <div className="endpointRow" key={item.scope}><div><strong>{item.name}</strong><small>{item.scope}</small></div><code>{item.mcpEndpoint}</code><button className="btn" onClick={() => void copy(item.mcpEndpoint)}>Copiar ruta</button></div>)}
         </div>
 
-        <div className="protocolWarning"><strong>Estado actual</strong><p>La ruta existe y está protegida. Antes de conectarla a un cliente real falta implementar login/autorización para emitir su acceso MCP privado. No habilitaremos escrituras antes de eso.</p></div>
+        <div className="protocolWarning"><strong>Controles de negocio</strong><p>Cada cliente tendrá su propio complemento con nombre, descripción y endpoint propios. CONTROL CENTRAL ya genera esa configuración en el registro, pero no la habilita para creación hasta completar la autenticación por usuario y scope.</p></div>
       </div>
     </Sheet>
   );
