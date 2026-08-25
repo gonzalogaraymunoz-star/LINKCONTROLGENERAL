@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCentralSupabase } from "@/lib/supabase/server";
+import { STAGES } from "@/lib/crm/stages";
 
 const ROOT_CONTROL_ID = "00000000-0000-0000-0000-000000000001";
 const ACTOR = "link-control-app";
@@ -80,14 +81,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, cycle });
   }
 
+  if (action === "move_cycle_stage") {
+    const cycleId = String(body.cycleId || "");
+    const targetStage = String(body.stage || "");
+    const { data: cycle, error: cycleError } = await supabase.from("client_cycles").select("id,client_id,stage").eq("id", cycleId).single();
+    if (cycleError || !cycle) return NextResponse.json({ ok: false, error: cycleError?.message || "cycle_not_found" }, { status: 404 });
+    const currentIndex = STAGES.findIndex((stage) => stage.key === cycle.stage);
+    const targetIndex = STAGES.findIndex((stage) => stage.key === targetStage);
+    if (currentIndex < 0 || targetIndex < 0) return NextResponse.json({ ok: false, error: "invalid_stage" }, { status: 400 });
+    if (targetIndex !== currentIndex + 1) return NextResponse.json({ ok: false, error: "only_next_stage_allowed" }, { status: 409 });
+
+    const { data: pendingActions, error: pendingError } = await supabase
+      .from("work_items")
+      .select("id,title")
+      .eq("cycle_id", cycleId)
+      .eq("stage", cycle.stage)
+      .eq("kind", "action")
+      .neq("status", "done")
+      .neq("status", "cancelled");
+    if (pendingError) return NextResponse.json({ ok: false, error: pendingError.message }, { status: 400 });
+    if ((pendingActions || []).length) {
+      return NextResponse.json({ ok: false, error: "stage_requirements_incomplete", pending: pendingActions }, { status: 409 });
+    }
+
+    const { data: updated, error: updateError } = await supabase.from("client_cycles").update({ stage: targetStage, updated_at: new Date().toISOString() }).eq("id", cycleId).select("id,client_id,stage").single();
+    if (updateError) return NextResponse.json({ ok: false, error: updateError.message }, { status: 400 });
+    await recordEvent(supabase, { clientId: updated.client_id, eventType: "stage.changed", objectType: "client_cycle", objectId: cycleId, payload: { from: cycle.stage, to: targetStage } });
+    return NextResponse.json({ ok: true, cycle: updated });
+  }
+
   if (action === "update_cycle") {
     const cycleId = String(body.cycleId || "");
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (body.stage !== undefined) patch.stage = body.stage;
     if (body.nextMilestone !== undefined) patch.next_milestone = body.nextMilestone;
     const { data, error } = await supabase.from("client_cycles").update(patch).eq("id", cycleId).select("id,client_id,stage,next_milestone").single();
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
-    await recordEvent(supabase, { clientId: data.client_id, eventType: body.stage !== undefined ? "stage.changed" : "cycle.updated", objectType: "client_cycle", objectId: cycleId, payload: patch });
+    await recordEvent(supabase, { clientId: data.client_id, eventType: "cycle.updated", objectType: "client_cycle", objectId: cycleId, payload: patch });
     return NextResponse.json({ ok: true, cycle: data });
   }
 
