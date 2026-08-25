@@ -1,0 +1,615 @@
+"use client";
+
+import { draggable, dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { motion } from "motion/react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { STAGES, STAGE_BY_KEY } from "@/lib/crm/stages";
+import type { StageKey } from "@/lib/types";
+import { AddWorkPopover, InlineEdit, Sheet, Tip, WorkMenu } from "@/components/ui/LinkPrimitives";
+
+type ViewKey = "clients" | "work" | "calendar" | "activity";
+type ClientRow = { id: string; name: string; slug?: string | null; status: string; short_code?: string | null; accent?: string | null };
+type CycleRow = { id: string; client_id: string; need_id?: string | null; product_id?: string | null; stage: StageKey; progress: number; next_milestone?: string | null; status: string };
+type NeedRow = { id: string; client_id: string; title: string; description?: string | null; status: string };
+type ProductRow = { id: string; name: string; description?: string | null; metadata?: Record<string, unknown> | null };
+type WorkItemRow = { id: string; client_id?: string | null; cycle_id?: string | null; stage?: StageKey | null; kind: string; title: string; description?: string | null; due_at?: string | null; priority?: number | null; status: string };
+type EventRow = { id: string | number; client_id?: string | null; event_type: string; actor?: string | null; object_type?: string | null; created_at: string };
+type CentralData = { ok: boolean; clients: ClientRow[]; cycles: CycleRow[]; needs: NeedRow[]; products: ProductRow[]; workItems: WorkItemRow[]; events: EventRow[] };
+
+const NAV: Array<{ key: ViewKey; label: string; icon: string }> = [
+  { key: "clients", label: "Clientes", icon: "◎" },
+  { key: "work", label: "Trabajo", icon: "▦" },
+  { key: "calendar", label: "Calendario", icon: "□" },
+  { key: "activity", label: "Actividad", icon: "≡" },
+];
+
+function safeStage(value?: string | null): StageKey {
+  return STAGES.some(stage => stage.key === value) ? (value as StageKey) : "understand";
+}
+
+function fmtDate(value?: string | null) {
+  if (!value) return "Sin fecha";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function shortCode(client: ClientRow) {
+  return client.short_code || client.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+async function postAction(action: string, payload: Record<string, unknown>) {
+  const response = await fetch("/api/central", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  const body = await response.json();
+  if (!response.ok || !body.ok) {
+    const error = new Error(body.error || `HTTP ${response.status}`) as Error & { payload?: unknown };
+    error.payload = body;
+    throw error;
+  }
+  return body;
+}
+
+export default function LinkControlAppV4({ initialScope: _initialScope }: { initialScope?: string } = {}) {
+  const [view, setView] = useState<ViewKey>("clients");
+  const [data, setData] = useState<CentralData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [newClientOpen, setNewClientOpen] = useState(false);
+  const [newCycleClient, setNewCycleClient] = useState<ClientRow | null>(null);
+  const [editingWork, setEditingWork] = useState<WorkItemRow | null>(null);
+  const [peekClientId, setPeekClientId] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/central", { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok || !body.ok) throw new Error(body.error || `HTTP ${response.status}`);
+      setData(body as CentralData);
+      setClientId(current => current || body.clients?.[0]?.id || null);
+    } catch (err) {
+      setData(null);
+      setError(err instanceof Error ? err.message : "No fue posible conectar con LINK CONTROL");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 2800);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  const filteredClients = useMemo(() => {
+    const clients = data?.clients ?? [];
+    const query = search.trim().toLowerCase();
+    return query ? clients.filter(client => client.name.toLowerCase().includes(query) || client.slug?.toLowerCase().includes(query)) : clients;
+  }, [data, search]);
+
+  const selectedClient = useMemo(
+    () => data?.clients.find(client => client.id === clientId) ?? filteredClients[0] ?? null,
+    [data, clientId, filteredClients],
+  );
+  const activeCycle = useMemo(
+    () => data?.cycles.find(cycle => cycle.client_id === selectedClient?.id && cycle.status === "active") ?? null,
+    [data, selectedClient],
+  );
+  const need = useMemo(
+    () => data?.needs.find(item => item.id === activeCycle?.need_id) ?? data?.needs.find(item => item.client_id === selectedClient?.id) ?? null,
+    [data, activeCycle, selectedClient],
+  );
+  const product = useMemo(
+    () => data?.products.find(item => item.id === activeCycle?.product_id) ?? null,
+    [data, activeCycle],
+  );
+  const clientWork = useMemo(
+    () => (data?.workItems ?? []).filter(item => item.client_id === selectedClient?.id && (!activeCycle || item.cycle_id === activeCycle.id)),
+    [data, selectedClient, activeCycle],
+  );
+
+  async function run(action: string, payload: Record<string, unknown>, success?: string) {
+    setError(null);
+    try {
+      const body = await postAction(action, payload);
+      await reload();
+      if (success) setNotice(success);
+      return body;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "La operación falló";
+      if (message === "stage_requirements_incomplete" && err && typeof err === "object" && "payload" in err) {
+        const payload = (err as { payload?: { pending?: Array<{ title: string }> } }).payload;
+        setError(`No puede avanzar: ${(payload?.pending ?? []).map(item => item.title).join(" · ")}`);
+      } else {
+        setError(message);
+      }
+      throw err;
+    }
+  }
+
+  async function createWork(kind: "action" | "task" | "gesture", input: { title: string; dueAt: string | null; priority: number }) {
+    if (!selectedClient || !activeCycle) return;
+    await run("create_work_item", {
+      clientId: selectedClient.id,
+      cycleId: activeCycle.id,
+      stage: activeCycle.stage,
+      kind,
+      title: input.title,
+      dueAt: input.dueAt,
+      priority: input.priority,
+      source: "manual",
+    }, "Trabajo creado");
+  }
+
+  async function saveWork(item: WorkItemRow, patch: Record<string, unknown>) {
+    await run("update_work_item", { workItemId: item.id, ...patch }, "Trabajo actualizado");
+  }
+
+  async function moveCycle(cycleId: string, target: StageKey) {
+    await run("move_cycle_stage", { cycleId, stage: target }, `Movido a ${STAGE_BY_KEY[target].name}`);
+  }
+
+  async function advanceStage() {
+    if (!activeCycle) return;
+    const currentIndex = STAGES.findIndex(stage => stage.key === safeStage(activeCycle.stage));
+    const next = STAGES[currentIndex + 1];
+    if (!next) {
+      setNotice("Escalar es la última etapa. Abre una nueva necesidad para continuar.");
+      return;
+    }
+    await moveCycle(activeCycle.id, next.key);
+  }
+
+  if (loading) return <ConnectionScreen title="Conectando LINK CONTROL…" text="Leyendo Supabase. No se cargan datos de demostración." />;
+  if (error && !data) return <ConnectionScreen title="LINK CONTROL no está conectado" text={error} retry={reload} />;
+  if (!data) return null;
+
+  const peekClient = data.clients.find(client => client.id === peekClientId) ?? null;
+  const peekCycle = peekClient ? data.cycles.find(cycle => cycle.client_id === peekClient.id && cycle.status === "active") ?? null : null;
+
+  return (
+    <div className="appShell proApp">
+      <aside className="sidebar">
+        <div className="brand"><div className="logo">LC</div><div><strong>LINK CONTROL</strong><small>Workspace operacional</small></div></div>
+        <div className="sideScroll">
+          <div className="sideTitle">Operación</div>
+          {NAV.map(item => (
+            <button key={item.key} className={`nav ${view === item.key ? "active" : ""}`} onClick={() => setView(item.key)}>
+              <span>{item.icon}</span>{item.label}
+            </button>
+          ))}
+          <div className="sideTitle">Clientes</div>
+          {data.clients.map(client => (
+            <button key={client.id} className="treeItem" onClick={() => { setClientId(client.id); setView("clients"); }}>
+              <i style={{ background: client.accent || "#777" }} />{client.name}
+            </button>
+          ))}
+        </div>
+        <div className="sidebarFoot"><div className="identity"><div className="avatar">LC</div><div><strong>Supabase</strong><span>fuente de verdad conectada</span></div></div></div>
+      </aside>
+
+      <section className="workspace">
+        <header className="topbar">
+          <div className="crumb"><b>LINK CONTROL</b><span>/</span>{NAV.find(item => item.key === view)?.label}</div>
+          <div className="search"><span>⌕</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar cliente…" /></div>
+          <Tip label="Volver a leer Supabase"><button className="topBtn" onClick={() => void reload()}>↻</button></Tip>
+        </header>
+
+        <main className="content proContent">
+          {notice ? <motion.div className="toastInline" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>{notice}</motion.div> : null}
+          {error ? <div className="errorInline">{error}</div> : null}
+
+          {view === "clients" ? (
+            <ClientsView
+              clients={filteredClients}
+              selected={selectedClient}
+              cycle={activeCycle}
+              need={need}
+              product={product}
+              work={clientWork}
+              onSelect={setClientId}
+              onNew={() => setNewClientOpen(true)}
+              onNewCycle={setNewCycleClient}
+              onSaveClientName={value => selectedClient ? run("update_client", { clientId: selectedClient.id, name: value }, "Cliente actualizado") : Promise.resolve()}
+              onSaveNeed={value => need ? run("update_need", { needId: need.id, title: value, description: need.description ?? null }, "Necesidad guardada") : Promise.resolve()}
+              onSaveProduct={value => product ? run("update_product", { productId: product.id, name: value, description: product.description ?? null }, "Producto guardado") : Promise.resolve()}
+              onSaveMilestone={value => activeCycle ? run("update_cycle", { cycleId: activeCycle.id, nextMilestone: value }, "Próximo hito guardado") : Promise.resolve()}
+              onCreateWork={createWork}
+              onToggle={item => run("set_work_status", { workItemId: item.id, status: item.status === "done" ? "pending" : "done" }, item.status === "done" ? "Marcado pendiente" : "Completado")}
+              onEditWork={setEditingWork}
+              onSaveWork={saveWork}
+              onArchiveWork={item => run("archive_work_item", { workItemId: item.id }, "Trabajo archivado")}
+              onAdvance={advanceStage}
+            />
+          ) : null}
+          {view === "work" ? <WorkView data={data} onPeek={setPeekClientId} onMove={moveCycle} /> : null}
+          {view === "calendar" ? <CalendarView data={data} onPeek={setPeekClientId} /> : null}
+          {view === "activity" ? <ActivityView data={data} /> : null}
+        </main>
+      </section>
+
+      <NewClientSheet
+        open={newClientOpen}
+        onOpenChange={setNewClientOpen}
+        onCreate={async values => {
+          const created = await postAction("create_client", values);
+          await postAction("create_cycle", { clientId: created.client.id, need: values.need, product: values.product, stage: "understand", nextMilestone: "Completar diagnóstico inicial" });
+          await reload();
+          setClientId(created.client.id);
+          setNewClientOpen(false);
+          setNotice("Cliente creado");
+        }}
+      />
+      <NewCycleSheet
+        client={newCycleClient}
+        onClose={() => setNewCycleClient(null)}
+        onCreate={async values => {
+          if (!newCycleClient) return;
+          await run("create_cycle", { clientId: newCycleClient.id, ...values, stage: "understand" }, "Nuevo ciclo creado");
+          setNewCycleClient(null);
+        }}
+      />
+      <WorkEditorSheet
+        item={editingWork}
+        onClose={() => setEditingWork(null)}
+        onSave={async patch => {
+          if (!editingWork) return;
+          await saveWork(editingWork, patch);
+          setEditingWork(null);
+        }}
+        onArchive={async () => {
+          if (!editingWork) return;
+          await run("archive_work_item", { workItemId: editingWork.id }, "Trabajo archivado");
+          setEditingWork(null);
+        }}
+      />
+      <PeekSheet
+        client={peekClient}
+        cycle={peekCycle}
+        data={data}
+        onClose={() => setPeekClientId(null)}
+        onOpenFull={() => {
+          if (!peekClient) return;
+          setClientId(peekClient.id);
+          setView("clients");
+          setPeekClientId(null);
+        }}
+      />
+    </div>
+  );
+}
+
+function ClientsView(props: {
+  clients: ClientRow[];
+  selected: ClientRow | null;
+  cycle: CycleRow | null;
+  need: NeedRow | null;
+  product: ProductRow | null;
+  work: WorkItemRow[];
+  onSelect: (id: string) => void;
+  onNew: () => void;
+  onNewCycle: (client: ClientRow) => void;
+  onSaveClientName: (value: string) => Promise<unknown>;
+  onSaveNeed: (value: string) => Promise<unknown>;
+  onSaveProduct: (value: string) => Promise<unknown>;
+  onSaveMilestone: (value: string) => Promise<unknown>;
+  onCreateWork: (kind: "action" | "task" | "gesture", input: { title: string; dueAt: string | null; priority: number }) => Promise<void>;
+  onToggle: (item: WorkItemRow) => Promise<unknown>;
+  onEditWork: (item: WorkItemRow) => void;
+  onSaveWork: (item: WorkItemRow, patch: Record<string, unknown>) => Promise<void>;
+  onArchiveWork: (item: WorkItemRow) => Promise<unknown>;
+  onAdvance: () => Promise<void>;
+}) {
+  const { clients, selected, cycle, need, product, work } = props;
+  return (
+    <>
+      <div className="pageHead"><div><h1>Clientes</h1><p>Abre, edita y avanza directamente sobre la información real.</p></div><button className="btn primary" onClick={props.onNew}>＋ Cliente</button></div>
+      <div className="crmLayout proCrm">
+        <div className="crmList proClientList">
+          {clients.map(client => (
+            <button key={client.id} className={`clientRow ${selected?.id === client.id ? "active" : ""}`} onClick={() => props.onSelect(client.id)}>
+              <i style={{ background: client.accent || "#777" }} />
+              <span><strong>{client.name}</strong><small>{cycle?.client_id === client.id ? `${STAGE_BY_KEY[safeStage(cycle.stage)].name} · ${cycle.progress}%` : "Sin ciclo activo"}</small></span>
+            </button>
+          ))}
+        </div>
+        <div className="crmMain proDoc">
+          {!selected ? <Empty text="Selecciona un cliente" /> : !cycle ? (
+            <div className="emptyClient">
+              <ClientHeader client={selected} saveName={props.onSaveClientName} />
+              <p>Este cliente todavía no tiene una necesidad activa.</p>
+              <button className="btn primary" onClick={() => props.onNewCycle(selected)}>Crear necesidad y producto</button>
+            </div>
+          ) : (
+            <>
+              <ClientHeader client={selected} cycle={cycle} saveName={props.onSaveClientName} />
+              <StageRail cycle={cycle} />
+              <section className="propertyStack">
+                <Property label="Necesidad"><InlineEdit value={need?.title || ""} placeholder="Describe la necesidad" onSave={props.onSaveNeed} /></Property>
+                <Property label="Producto"><InlineEdit value={product?.name || ""} placeholder="Define el producto" onSave={props.onSaveProduct} /></Property>
+                <Property label="Próximo paso"><InlineEdit value={cycle.next_milestone || ""} placeholder="Define el próximo hito" onSave={props.onSaveMilestone} /></Property>
+              </section>
+              <section className="workSections">
+                <WorkSection
+                  title="Trabajo de la etapa"
+                  items={work.filter(item => item.kind !== "gesture")}
+                  onToggle={props.onToggle}
+                  onEdit={props.onEditWork}
+                  onSave={props.onSaveWork}
+                  onArchive={props.onArchiveWork}
+                  footer={<div className="inlineAddRow"><AddWorkPopover label="Acción" kind="action" onCreate={input => props.onCreateWork("action", input)} /><AddWorkPopover label="Tarea" kind="task" onCreate={input => props.onCreateWork("task", input)} /></div>}
+                />
+                <WorkSection
+                  title="Gestos"
+                  items={work.filter(item => item.kind === "gesture")}
+                  onToggle={props.onToggle}
+                  onEdit={props.onEditWork}
+                  onSave={props.onSaveWork}
+                  onArchive={props.onArchiveWork}
+                  footer={<AddWorkPopover label="Gesto" kind="gesture" onCreate={input => props.onCreateWork("gesture", input)} />}
+                />
+              </section>
+              <div className="advanceRow">
+                <span>{work.filter(item => item.kind === "action" && item.status !== "done").length} acciones obligatorias pendientes</span>
+                <button className="btn primary" onClick={() => void props.onAdvance()}>Avanzar etapa →</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ClientHeader({ client, cycle, saveName }: { client: ClientRow; cycle?: CycleRow | null; saveName: (value: string) => Promise<unknown> }) {
+  return (
+    <div className="docHeader">
+      <div className="clientBadge" style={{ borderColor: `${client.accent || "#777"}55`, color: client.accent || "#777" }}>{shortCode(client)}</div>
+      <div className="docTitle">
+        <InlineEdit value={client.name} onSave={saveName} className="titleEdit" />
+        <div className="docMeta">{cycle ? `${STAGE_BY_KEY[safeStage(cycle.stage)].name} · ${cycle.progress}%` : "Sin ciclo activo"}</div>
+      </div>
+    </div>
+  );
+}
+
+function StageRail({ cycle }: { cycle: CycleRow }) {
+  const current = STAGE_BY_KEY[safeStage(cycle.stage)].order;
+  return (
+    <div className="stageRail">
+      {STAGES.map(stage => (
+        <div key={stage.key} className={`stagePill ${stage.order < current ? "done" : ""} ${stage.key === safeStage(cycle.stage) ? "active" : ""}`}>
+          <span>0{stage.order}</span><strong>{stage.name}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Property({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="propertyRow"><div className="propertyLabel">{label}</div><div className="propertyValue">{children}</div></div>;
+}
+
+function WorkSection({ title, items, onToggle, onEdit, onSave, onArchive, footer }: {
+  title: string;
+  items: WorkItemRow[];
+  onToggle: (item: WorkItemRow) => Promise<unknown>;
+  onEdit: (item: WorkItemRow) => void;
+  onSave: (item: WorkItemRow, patch: Record<string, unknown>) => Promise<void>;
+  onArchive: (item: WorkItemRow) => Promise<unknown>;
+  footer: ReactNode;
+}) {
+  return (
+    <div className="workBlock">
+      <div className="workBlockHead"><h3>{title}</h3><span>{items.filter(item => item.status !== "done").length} pendientes</span></div>
+      {items.map(item => <RealWorkItem key={item.id} item={item} onToggle={onToggle} onEdit={onEdit} onSave={onSave} onArchive={onArchive} />)}
+      <div className="workBlockFoot">{footer}</div>
+    </div>
+  );
+}
+
+function RealWorkItem({ item, onToggle, onEdit, onSave, onArchive }: {
+  item: WorkItemRow;
+  onToggle: (item: WorkItemRow) => Promise<unknown>;
+  onEdit: (item: WorkItemRow) => void;
+  onSave: (item: WorkItemRow, patch: Record<string, unknown>) => Promise<void>;
+  onArchive: (item: WorkItemRow) => Promise<unknown>;
+}) {
+  const done = item.status === "done";
+  return (
+    <motion.div layout className={`proWorkItem ${done ? "isDone" : ""}`}>
+      <button className={`check ${done ? "done" : ""}`} onClick={() => void onToggle(item)}>{done ? "✓" : ""}</button>
+      <div className="workText"><InlineEdit value={item.title} onSave={title => onSave(item, { title })} /><small>{item.due_at ? fmtDate(item.due_at) : item.kind === "gesture" ? "Gesto manual" : "Sin fecha"}</small></div>
+      <span className="kindChip">{item.kind}</span>
+      <WorkMenu onEdit={() => onEdit(item)} onSchedule={() => onEdit(item)} onConvert={kind => void onSave(item, { kind })} onArchive={() => void onArchive(item)} />
+    </motion.div>
+  );
+}
+
+function WorkView({ data, onPeek, onMove }: { data: CentralData; onPeek: (id: string) => void; onMove: (cycleId: string, target: StageKey) => Promise<void> }) {
+  return (
+    <>
+      <div className="pageHead"><div><h1>Trabajo</h1><p>Arrastra cuando la etapa esté lista. El servidor valida el cambio.</p></div></div>
+      <div className="kanbanPro">
+        {STAGES.map(stage => <KanbanColumn key={stage.key} stage={stage.key} label={stage.name} cycles={data.cycles.filter(cycle => safeStage(cycle.stage) === stage.key && cycle.status === "active")} data={data} onPeek={onPeek} onMove={onMove} />)}
+      </div>
+    </>
+  );
+}
+
+function KanbanColumn({ stage, label, cycles, data, onPeek, onMove }: { stage: StageKey; label: string; cycles: CycleRow[]; data: CentralData; onPeek: (id: string) => void; onMove: (cycleId: string, target: StageKey) => Promise<void> }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    if (!ref.current) return;
+    return dropTargetForElements({
+      element: ref.current,
+      getData: () => ({ type: "stage", stage }),
+      onDragEnter: () => setOver(true),
+      onDragLeave: () => setOver(false),
+      onDrop: ({ source }) => {
+        setOver(false);
+        const cycleId = String(source.data.cycleId || "");
+        if (cycleId) void onMove(cycleId, stage);
+      },
+    });
+  }, [stage, onMove]);
+  return (
+    <div ref={ref} className={`kanbanColPro ${over ? "isOver" : ""}`}>
+      <div className="kanbanColHead"><strong>{label}</strong><span>{cycles.length}</span></div>
+      {cycles.map(cycle => <KanbanCard key={cycle.id} cycle={cycle} data={data} onPeek={onPeek} />)}
+    </div>
+  );
+}
+
+function KanbanCard({ cycle, data, onPeek }: { cycle: CycleRow; data: CentralData; onPeek: (id: string) => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const client = data.clients.find(item => item.id === cycle.client_id);
+  useEffect(() => {
+    if (!ref.current) return;
+    return draggable({
+      element: ref.current,
+      getInitialData: () => ({ type: "cycle", cycleId: cycle.id, stage: cycle.stage }),
+      onDragStart: () => setDragging(true),
+      onDrop: () => setDragging(false),
+    });
+  }, [cycle.id, cycle.stage]);
+  if (!client) return null;
+  const pending = data.workItems.filter(item => item.cycle_id === cycle.id && item.status !== "done").length;
+  return (
+    <motion.button layout ref={ref} className={`kanbanCardPro ${dragging ? "dragging" : ""}`} onClick={() => onPeek(client.id)}>
+      <div className="kanbanCardTitle"><i style={{ background: client.accent || "#777" }} /><strong>{client.name}</strong></div>
+      <p>{data.needs.find(item => item.id === cycle.need_id)?.title || "Sin necesidad"}</p>
+      <div className="kanbanCardFoot"><span>{pending} pendientes</span><b>{cycle.progress}%</b></div>
+    </motion.button>
+  );
+}
+
+function CalendarView({ data, onPeek }: { data: CentralData; onPeek: (id: string) => void }) {
+  const scheduled = data.workItems.filter(item => item.due_at).sort((a, b) => new Date(a.due_at || 0).getTime() - new Date(b.due_at || 0).getTime());
+  return (
+    <>
+      <div className="pageHead"><div><h1>Calendario</h1><p>Solo trabajo con fecha real registrada en Supabase.</p></div></div>
+      <div className="agendaList">
+        {scheduled.length ? scheduled.map(item => {
+          const client = data.clients.find(entry => entry.id === item.client_id);
+          return (
+            <button key={item.id} className="agendaRow" onClick={() => item.client_id && onPeek(item.client_id)}>
+              <time>{fmtDate(item.due_at)}</time>
+              <div><strong>{item.title}</strong><small>{client?.name || "Sin cliente"} · {item.kind}</small></div>
+              <span className={`statusText ${item.status}`}>{item.status}</span>
+            </button>
+          );
+        }) : <Empty text="No hay trabajo con fecha" />}
+      </div>
+    </>
+  );
+}
+
+function ActivityView({ data }: { data: CentralData }) {
+  return (
+    <>
+      <div className="pageHead"><div><h1>Actividad</h1><p>Auditoría real de cambios relevantes.</p></div></div>
+      <div className="activityList">
+        {data.events.map(event => {
+          const client = data.clients.find(item => item.id === event.client_id);
+          return (
+            <div className="activityRow" key={event.id}>
+              <time>{fmtDate(event.created_at)}</time>
+              <div><strong>{event.event_type}</strong><small>{client?.name || "Sistema"} · {event.actor || "system"}</small></div>
+              <span>{event.object_type || "—"}</span>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function NewClientSheet({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (value: boolean) => void; onCreate: (values: { name: string; need: string; product: string; accent: string }) => Promise<void> }) {
+  const [name, setName] = useState("");
+  const [need, setNeed] = useState("");
+  const [product, setProduct] = useState("");
+  const [accent, setAccent] = useState("#6c5ce7");
+  const [saving, setSaving] = useState(false);
+  async function submit() {
+    if (!name.trim() || !need.trim() || !product.trim()) return;
+    setSaving(true);
+    try { await onCreate({ name: name.trim(), need: need.trim(), product: product.trim(), accent }); }
+    finally { setSaving(false); }
+  }
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange} title="Nuevo cliente" description="Crea cliente, necesidad y producto en una sola operación." footer={<><button className="btn" onClick={() => onOpenChange(false)}>Cancelar</button><button className="btn primary" onClick={() => void submit()} disabled={saving}>{saving ? "Creando…" : "Crear cliente"}</button></>}>
+      <div className="sheetForm">
+        <label><span>Nombre</span><input className="formControl big" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder="Nombre del cliente o empresa" /></label>
+        <label><span>Necesidad inicial</span><textarea className="formControl" rows={3} value={need} onChange={event => setNeed(event.target.value)} placeholder="¿Qué necesita resolver?" /></label>
+        <label><span>Producto inicial</span><input className="formControl" value={product} onChange={event => setProduct(event.target.value)} placeholder="¿Qué vamos a entregar primero?" /></label>
+        <label><span>Color de identificación</span><input type="color" value={accent} onChange={event => setAccent(event.target.value)} /></label>
+      </div>
+    </Sheet>
+  );
+}
+
+function NewCycleSheet({ client, onClose, onCreate }: { client: ClientRow | null; onClose: () => void; onCreate: (values: { need: string; product: string; nextMilestone: string }) => Promise<void> }) {
+  const [need, setNeed] = useState("");
+  const [product, setProduct] = useState("");
+  const [nextMilestone, setNextMilestone] = useState("Completar diagnóstico inicial");
+  return (
+    <Sheet open={!!client} onOpenChange={value => { if (!value) onClose(); }} title={`Nueva necesidad · ${client?.name || ""}`} description="Abre un nuevo ciclo LINK para este cliente." footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={() => void onCreate({ need, product, nextMilestone })}>Crear ciclo</button></>}>
+      <div className="sheetForm">
+        <label><span>Necesidad</span><textarea className="formControl" rows={3} value={need} onChange={event => setNeed(event.target.value)} /></label>
+        <label><span>Producto</span><input className="formControl" value={product} onChange={event => setProduct(event.target.value)} /></label>
+        <label><span>Primer hito</span><input className="formControl" value={nextMilestone} onChange={event => setNextMilestone(event.target.value)} /></label>
+      </div>
+    </Sheet>
+  );
+}
+
+function WorkEditorSheet({ item, onClose, onSave, onArchive }: { item: WorkItemRow | null; onClose: () => void; onSave: (patch: Record<string, unknown>) => Promise<void>; onArchive: () => Promise<void> }) {
+  const [title, setTitle] = useState("");
+  const [due, setDue] = useState("");
+  const [priority, setPriority] = useState(2);
+  useEffect(() => {
+    setTitle(item?.title || "");
+    setPriority(item?.priority || 2);
+    setDue(item?.due_at ? new Date(item.due_at).toISOString().slice(0, 16) : "");
+  }, [item]);
+  return (
+    <Sheet open={!!item} onOpenChange={value => { if (!value) onClose(); }} title="Editar trabajo" description="Los cambios se persisten en Supabase." footer={<><button className="btn dangerBtn" onClick={() => void onArchive()}>Archivar</button><span className="sheetSpacer" /><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={() => void onSave({ title, dueAt: due ? new Date(due).toISOString() : null, priority })}>Guardar</button></>}>
+      <div className="sheetForm">
+        <label><span>Título</span><input className="formControl big" value={title} onChange={event => setTitle(event.target.value)} /></label>
+        <label><span>Fecha y hora</span><input className="formControl" type="datetime-local" value={due} onChange={event => setDue(event.target.value)} /></label>
+        <label><span>Prioridad</span><select className="formControl" value={priority} onChange={event => setPriority(Number(event.target.value))}><option value={1}>Alta</option><option value={2}>Normal</option><option value={3}>Baja</option></select></label>
+      </div>
+    </Sheet>
+  );
+}
+
+function PeekSheet({ client, cycle, data, onClose, onOpenFull }: { client: ClientRow | null; cycle: CycleRow | null; data: CentralData; onClose: () => void; onOpenFull: () => void }) {
+  const work = cycle ? data.workItems.filter(item => item.cycle_id === cycle.id) : [];
+  return (
+    <Sheet open={!!client} onOpenChange={value => { if (!value) onClose(); }} title={client?.name || "Cliente"} description={cycle ? `${STAGE_BY_KEY[safeStage(cycle.stage)].name} · ${cycle.progress}%` : "Sin ciclo activo"} footer={<button className="btn primary" onClick={onOpenFull}>Abrir ficha completa →</button>}>
+      <div className="peekBody">
+        <Property label="Necesidad"><div>{data.needs.find(item => item.id === cycle?.need_id)?.title || "Sin necesidad"}</div></Property>
+        <Property label="Producto"><div>{data.products.find(item => item.id === cycle?.product_id)?.name || "Sin producto"}</div></Property>
+        <div className="peekPending"><strong>Pendientes</strong>{work.filter(item => item.status !== "done").slice(0, 6).map(item => <div key={item.id}>□ {item.title}</div>)}</div>
+      </div>
+    </Sheet>
+  );
+}
+
+function Empty({ text }: { text: string }) { return <div className="emptyState">{text}</div>; }
+
+function ConnectionScreen({ title, text, retry }: { title: string; text: string; retry?: () => void | Promise<void> }) {
+  return <main className="connectionScreen"><section><div className="logo">LC</div><h1>{title}</h1><p>{text}</p>{retry ? <button className="btn primary" onClick={() => void retry()}>Reintentar</button> : null}</section></main>;
+}
