@@ -1,13 +1,13 @@
 "use client";
 
 import LinkControlAppV4 from "./LinkControlAppV4";
-import ComplementsDock from "./ComplementsDock";
+import OperationalDock from "./OperationalDock";
 
 export default function LinkControlApp(props: { initialScope?: string } = {}) {
   return (
     <>
       <LinkControlAppV4 {...props} />
-      <ComplementsDock />
+      <OperationalDock />
     </>
   );
 }
