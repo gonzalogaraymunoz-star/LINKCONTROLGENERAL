@@ -24,17 +24,42 @@ export async function GET() {
   const supabase = getCentralSupabase();
   if (!supabase) return NextResponse.json({ ok: false, configured: false, error: "central_supabase_not_configured" }, { status: 503 });
 
-  const [{ data: clients, error: clientsError }, { data: cycles, error: cyclesError }, { data: needs }, { data: products }, { data: workItems }, { data: events }] = await Promise.all([
+  const [
+    { data: clients, error: clientsError },
+    { data: cycles, error: cyclesError },
+    { data: needs },
+    { data: products },
+    { data: workItems },
+    { data: events },
+    { data: servicePlans },
+    { data: clientPlans },
+    { data: strategies },
+  ] = await Promise.all([
     supabase.from("clients").select("id,name,slug,status,short_code,accent,control_id").eq("status", "active").order("created_at"),
     supabase.from("client_cycles").select("id,client_id,need_id,product_id,stage,progress,next_milestone,status,updated_at").eq("status", "active"),
     supabase.from("needs").select("id,client_id,title,description,status"),
     supabase.from("products").select("id,name,description,product_type,active,metadata"),
-    supabase.from("work_items").select("id,client_id,cycle_id,stage,kind,title,description,due_at,priority,status,source,created_at,updated_at").neq("status", "cancelled").order("created_at"),
+    supabase.from("work_items").select("id,client_id,cycle_id,strategy_id,stage,kind,title,description,due_at,priority,status,source,created_at,updated_at").neq("status", "cancelled").order("created_at"),
     supabase.from("events").select("id,client_id,event_type,actor,object_type,object_id,payload,created_at").order("created_at", { ascending: false }).limit(100),
+    supabase.from("service_plans").select("id,name,description,billing_model,currency,base_price,status,metadata").eq("status", "active").order("name"),
+    supabase.from("client_plan_assignments").select("id,client_id,plan_id,plan_name_snapshot,agreed_price,currency,status,starts_at,ends_at,objectives,metadata").eq("status", "active"),
+    supabase.from("client_strategies").select("id,client_id,cycle_id,plan_assignment_id,title,objective,diagnosis,approach,success_metrics,status,metadata,updated_at").eq("status", "active"),
   ]);
 
   if (clientsError || cyclesError) return NextResponse.json({ ok: false, error: clientsError?.message || cyclesError?.message }, { status: 500 });
-  return NextResponse.json({ ok: true, configured: true, clients: clients ?? [], cycles: cycles ?? [], needs: needs ?? [], products: products ?? [], workItems: workItems ?? [], events: events ?? [] });
+  return NextResponse.json({
+    ok: true,
+    configured: true,
+    clients: clients ?? [],
+    cycles: cycles ?? [],
+    needs: needs ?? [],
+    products: products ?? [],
+    workItems: workItems ?? [],
+    events: events ?? [],
+    servicePlans: servicePlans ?? [],
+    clientPlans: clientPlans ?? [],
+    strategies: strategies ?? [],
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -42,6 +67,21 @@ export async function POST(request: NextRequest) {
   if (!supabase) return NextResponse.json({ ok: false, configured: false, error: "central_supabase_not_configured" }, { status: 503 });
   const body = await request.json();
   const action = String(body.action || "");
+
+  if (action === "onboard_client") {
+    const { data, error } = await supabase.rpc("lc_onboard_client", {
+      p_name: String(body.name || ""),
+      p_accent: String(body.accent || "#6c5ce7"),
+      p_need: String(body.need || ""),
+      p_product: String(body.product || ""),
+      p_plan: String(body.plan || ""),
+      p_strategy_title: String(body.strategyTitle || "Estrategia inicial"),
+      p_strategy_objective: String(body.strategyObjective || ""),
+      p_next_milestone: String(body.nextMilestone || "Completar diagnóstico inicial"),
+    });
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, clientId: data });
+  }
 
   if (action === "create_client") {
     const name = String(body.name || "").trim();
@@ -81,6 +121,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, cycle });
   }
 
+  if (action === "update_plan_assignment") {
+    const assignmentId = String(body.assignmentId || "");
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.planName !== undefined) patch.plan_name_snapshot = String(body.planName);
+    if (body.agreedPrice !== undefined) patch.agreed_price = body.agreedPrice === null ? null : Number(body.agreedPrice);
+    if (body.objectives !== undefined) patch.objectives = body.objectives;
+    const { data, error } = await supabase.from("client_plan_assignments").update(patch).eq("id", assignmentId).select("id,client_id,plan_name_snapshot").single();
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+    await recordEvent(supabase, { clientId: data.client_id, eventType: "plan.updated", objectType: "client_plan_assignment", objectId: assignmentId, payload: patch });
+    return NextResponse.json({ ok: true, plan: data });
+  }
+
+  if (action === "update_strategy") {
+    const strategyId = String(body.strategyId || "");
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.title !== undefined) patch.title = String(body.title);
+    if (body.objective !== undefined) patch.objective = body.objective || null;
+    if (body.diagnosis !== undefined) patch.diagnosis = body.diagnosis || null;
+    if (body.approach !== undefined) patch.approach = body.approach || null;
+    if (body.successMetrics !== undefined) patch.success_metrics = body.successMetrics;
+    const { data, error } = await supabase.from("client_strategies").update(patch).eq("id", strategyId).select("id,client_id,title,objective").single();
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+    await recordEvent(supabase, { clientId: data.client_id, eventType: "strategy.updated", objectType: "client_strategy", objectId: strategyId, payload: patch });
+    return NextResponse.json({ ok: true, strategy: data });
+  }
+
   if (action === "move_cycle_stage") {
     const cycleId = String(body.cycleId || "");
     const targetStage = String(body.stage || "");
@@ -92,17 +158,9 @@ export async function POST(request: NextRequest) {
     if (targetIndex !== currentIndex + 1) return NextResponse.json({ ok: false, error: "only_next_stage_allowed" }, { status: 409 });
 
     const { data: pendingActions, error: pendingError } = await supabase
-      .from("work_items")
-      .select("id,title")
-      .eq("cycle_id", cycleId)
-      .eq("stage", cycle.stage)
-      .eq("kind", "action")
-      .neq("status", "done")
-      .neq("status", "cancelled");
+      .from("work_items").select("id,title").eq("cycle_id", cycleId).eq("stage", cycle.stage).eq("kind", "action").neq("status", "done").neq("status", "cancelled");
     if (pendingError) return NextResponse.json({ ok: false, error: pendingError.message }, { status: 400 });
-    if ((pendingActions || []).length) {
-      return NextResponse.json({ ok: false, error: "stage_requirements_incomplete", pending: pendingActions }, { status: 409 });
-    }
+    if ((pendingActions || []).length) return NextResponse.json({ ok: false, error: "stage_requirements_incomplete", pending: pendingActions }, { status: 409 });
 
     const { data: updated, error: updateError } = await supabase.from("client_cycles").update({ stage: targetStage, updated_at: new Date().toISOString() }).eq("id", cycleId).select("id,client_id,stage").single();
     if (updateError) return NextResponse.json({ ok: false, error: updateError.message }, { status: 400 });
@@ -138,7 +196,20 @@ export async function POST(request: NextRequest) {
   }
 
   if (action === "create_work_item") {
-    const { data, error } = await supabase.from("work_items").insert({ control_id: ROOT_CONTROL_ID, client_id: body.clientId || null, cycle_id: body.cycleId || null, stage: body.stage || null, kind: body.kind || "task", title: String(body.title || "Nuevo trabajo"), description: body.description || null, due_at: body.dueAt || null, priority: body.priority || 2, status: "pending", source: body.source || "manual" }).select().single();
+    const { data, error } = await supabase.from("work_items").insert({
+      control_id: ROOT_CONTROL_ID,
+      client_id: body.clientId || null,
+      cycle_id: body.cycleId || null,
+      strategy_id: body.strategyId || null,
+      stage: body.stage || null,
+      kind: body.kind || "task",
+      title: String(body.title || "Nuevo trabajo"),
+      description: body.description || null,
+      due_at: body.dueAt || null,
+      priority: body.priority || 2,
+      status: "pending",
+      source: body.source || "manual",
+    }).select().single();
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, workItem: data });
   }
