@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
+const CENTRAL_SUPABASE_URL = "https://zgbnjlrxzvzpigmwidsp.supabase.co";
+
 function serviceClient(url?: string, serviceRole?: string) {
   if (!url || !serviceRole) return null;
   return createClient(url, serviceRole, {
@@ -8,12 +10,13 @@ function serviceClient(url?: string, serviceRole?: string) {
 }
 
 /**
- * Central data plane: existing Supabase project LINK PREVIEW.
- * CRM, controls/scopes, Preview Studio, memories, intelligence, artifacts and events.
+ * Central data plane: existing Supabase project LINK CONTROL CENTRAL.
+ * The project URL is public configuration, so the known project URL is a safe fallback.
+ * The service-role key remains secret and must come only from the server environment.
  */
 export function getCentralSupabase() {
   return serviceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || CENTRAL_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
 }
