@@ -31,7 +31,7 @@ export function OPTIONS() {
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "content-type, authorization, mcp-session-id",
+      "Access-Control-Allow-Headers": "content-type, authorization, mcp-session-id, x-link-mcp-token",
       "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",
     },
   });
