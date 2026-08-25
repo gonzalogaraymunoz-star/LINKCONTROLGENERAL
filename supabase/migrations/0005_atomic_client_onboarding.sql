@@ -39,7 +39,8 @@ begin
   if nullif(trim(p_plan),'') is null then raise exception 'plan_required'; end if;
   if nullif(trim(p_strategy_title),'') is null then raise exception 'strategy_title_required'; end if;
 
-  v_base_slug := lower(trim(regexp_replace(unaccent(p_name), '[^a-zA-Z0-9]+', '-', 'g')));
+  v_base_slug := lower(translate(trim(p_name), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN'));
+  v_base_slug := regexp_replace(v_base_slug, '[^a-z0-9]+', '-', 'g');
   v_base_slug := trim(both '-' from v_base_slug);
   if v_base_slug = '' then v_base_slug := 'cliente'; end if;
   v_slug := v_base_slug;
