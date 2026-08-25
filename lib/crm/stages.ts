@@ -1,0 +1,96 @@
+import type { StageDefinition, StageKey } from "@/lib/types";
+
+export const STAGES: StageDefinition[] = [
+  {
+    key: "understand",
+    order: 1,
+    name: "Entender",
+    outcome: "Diagnóstico claro y cuello de botella identificado.",
+    baseActions: [
+      "Registrar necesidad declarada",
+      "Recopilar antecedentes y contexto",
+      "Identificar cliente final y recorrido actual",
+      "Revisar situación digital y comercial",
+      "Detectar cuello de botella principal",
+      "Definir objetivo de la intervención",
+    ],
+    exitCriteria: ["Necesidad definida", "Cuello de botella validado", "Objetivo acordado"],
+  },
+  {
+    key: "organize",
+    order: 2,
+    name: "Ordenar",
+    outcome: "Oferta y prioridad listas para vender y construir.",
+    baseActions: [
+      "Definir propuesta de valor",
+      "Ordenar productos y servicios",
+      "Definir precios y prioridades",
+      "Definir público y canales",
+      "Diseñar recorrido comercial",
+      "Definir qué se construirá primero",
+    ],
+    exitCriteria: ["Oferta ordenada", "Prioridad aprobada", "Producto inicial definido"],
+  },
+  {
+    key: "build",
+    order: 3,
+    name: "Construir",
+    outcome: "Solución inicial funcionando en producción.",
+    baseActions: [
+      "Definir arquitectura de la solución",
+      "Crear identidad y activos necesarios",
+      "Construir website, landing, formulario o sistema inicial",
+      "Configurar estructura de datos e integraciones necesarias",
+      "Probar funcionalidades críticas",
+      "Publicar producción",
+    ],
+    exitCriteria: ["Producto construido", "Pruebas críticas aprobadas", "Producción activa", "Resultado registrado"],
+  },
+  {
+    key: "activate",
+    order: 4,
+    name: "Activar",
+    outcome: "Sistema generando primeras oportunidades o ventas.",
+    baseActions: [
+      "Definir canal de adquisición",
+      "Preparar campaña y mensajes",
+      "Crear piezas y formularios",
+      "Activar captación o venta",
+      "Registrar leads y respuestas",
+      "Medir primeras señales",
+    ],
+    exitCriteria: ["Canal activo", "Seguimiento operativo", "Primeras respuestas registradas"],
+  },
+  {
+    key: "support",
+    order: 5,
+    name: "Acompañar",
+    outcome: "Operación estable, medida y en mejora continua.",
+    baseActions: [
+      "Revisar funcionamiento",
+      "Registrar incidencias y soporte",
+      "Dar seguimiento comercial",
+      "Revisar datos y resultados",
+      "Crear mejoras y nuevas piezas",
+      "Mantener relación y compromisos",
+    ],
+    exitCriteria: ["Operación estable", "Métricas disponibles", "Rutina de seguimiento definida"],
+  },
+  {
+    key: "scale",
+    order: 6,
+    name: "Escalar",
+    outcome: "Nuevo ciclo de crecimiento identificado y priorizado.",
+    baseActions: [
+      "Analizar resultados acumulados",
+      "Detectar nuevo cuello de botella",
+      "Automatizar tareas repetibles",
+      "Agregar módulos o integraciones",
+      "Abrir productos o canales nuevos",
+      "Revisar rentabilidad y definir siguiente ciclo",
+    ],
+    exitCriteria: ["Oportunidad priorizada", "Caso económico revisado", "Siguiente necesidad registrada"],
+  },
+];
+
+export const STAGE_BY_KEY = Object.fromEntries(STAGES.map((stage) => [stage.key, stage])) as Record<StageKey, StageDefinition>;

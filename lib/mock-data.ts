@@ -1,0 +1,145 @@
+import type { Artifact, Client360, ControlNode, Gateway } from "@/lib/types";
+
+export const CLIENTS: Client360[] = [
+  {
+    id: "client_link_empresa",
+    name: "LINK Empresa",
+    shortCode: "LE",
+    accent: "#6c5ce7",
+    stage: "build",
+    progress: 78,
+    need: "Convertir una website de entrada en puerta de acceso a un acompañamiento empresarial completo.",
+    product: "Website de entrada + estructura comercial",
+    nextMilestone: "Validar versión y preparar publicación",
+    localIntelligence: "El producto inicial debe abrir el siguiente diagnóstico, no cerrar la relación.",
+    actions: [
+      { id: "a1", title: "Definir arquitectura digital", done: true },
+      { id: "a2", title: "Construir solución inicial", done: true },
+      { id: "a3", title: "Probar funcionalidades críticas", done: false },
+      { id: "a4", title: "Publicar producción", done: false },
+    ],
+    gestures: [
+      { id: "g1", title: "Revisar copy final", done: true },
+      { id: "g2", title: "Configurar dominio con cliente", done: false, due: "2026-08-25" },
+      { id: "g3", title: "Entregar explicación operativa", done: false },
+    ],
+  },
+  {
+    id: "client_lama",
+    name: "Lama Travelers",
+    shortCode: "LT",
+    accent: "#8666d8",
+    stage: "activate",
+    progress: 82,
+    need: "Aumentar reservas directas y sostener adquisición Brasil → Atacama.",
+    product: "Sistema de venta + campaña de adquisición",
+    nextMilestone: "Aprobar campaña y activar",
+    localIntelligence: "La adquisición debe conectarse a seguimiento y operación, no quedar separada del CRM.",
+    actions: [
+      { id: "a5", title: "Definir canal", done: true },
+      { id: "a6", title: "Preparar campaña", done: true },
+      { id: "a7", title: "Activar captación", done: false },
+      { id: "a8", title: "Medir primeras respuestas", done: false },
+    ],
+    gestures: [
+      { id: "g4", title: "Aprobar piezas", done: false, due: "2026-08-25" },
+      { id: "g5", title: "Revisar formulario de reserva", done: false },
+    ],
+  },
+  {
+    id: "client_hotel",
+    name: "Hotel Experience",
+    shortCode: "HE",
+    accent: "#477fbe",
+    stage: "organize",
+    progress: 48,
+    need: "Estructurar intermediación hotel → LINK → operador con reparto y seguimiento claro.",
+    product: "Arquitectura comercial B2B",
+    nextMilestone: "Aprobar propuesta y responsabilidades",
+    localIntelligence: "El hotel debe ver valor y control sin asumir operación.",
+    actions: [
+      { id: "a9", title: "Definir propuesta de valor", done: true },
+      { id: "a10", title: "Ordenar roles", done: true },
+      { id: "a11", title: "Definir recorrido comercial", done: false },
+      { id: "a12", title: "Priorizar implementación", done: false },
+    ],
+    gestures: [
+      { id: "g6", title: "Reunión con hotel", done: false },
+      { id: "g7", title: "Validar reparto comercial", done: false },
+    ],
+  },
+  {
+    id: "client_cupones",
+    name: "LINK Cupones",
+    shortCode: "LC",
+    accent: "#d17a32",
+    stage: "support",
+    progress: 68,
+    need: "Mantener partners activos y generar recurrencia en el club de beneficios.",
+    product: "Panel partners + seguimiento",
+    nextMilestone: "Revisar rendimiento por partner",
+    localIntelligence: "La recurrencia y el rendimiento por comercio son mejores señales que el volumen bruto.",
+    actions: [
+      { id: "a13", title: "Revisar funcionamiento", done: true },
+      { id: "a14", title: "Registrar incidencias", done: true },
+      { id: "a15", title: "Optimizar seguimiento", done: false },
+      { id: "a16", title: "Medir recurrencia", done: false },
+    ],
+    gestures: [
+      { id: "g8", title: "Contactar partner clave", done: false },
+      { id: "g9", title: "Revisar próximo lote de cupones", done: false },
+    ],
+  },
+  {
+    id: "client_norte",
+    name: "Cliente Norte",
+    shortCode: "CN",
+    accent: "#6b9d74",
+    stage: "understand",
+    progress: 26,
+    need: "Entender por qué su presencia digital no genera consultas suficientes.",
+    product: "Diagnóstico Comercial Digital",
+    nextMilestone: "Completar levantamiento y cuello de botella",
+    localIntelligence: "Aún no existe evidencia suficiente para proponer inteligencia transversal.",
+    actions: [
+      { id: "a17", title: "Registrar necesidad", done: true },
+      { id: "a18", title: "Recopilar antecedentes", done: false },
+      { id: "a19", title: "Identificar cliente final", done: false },
+      { id: "a20", title: "Detectar cuello de botella", done: false },
+    ],
+    gestures: [
+      { id: "g10", title: "Visitar negocio", done: false },
+      { id: "g11", title: "Solicitar material actual", done: false },
+    ],
+  },
+];
+
+export const ARTIFACTS: Artifact[] = [
+  { id: "ar1", type: "WEBSITE", name: "Website entrada LINK Empresa", version: "v4", stage: "build", source: "Preview Studio", clientId: "client_link_empresa" },
+  { id: "ar2", type: "PUBLICIDAD", name: "Campaña Lama septiembre", version: "v2", stage: "activate", source: "ChatGPT", clientId: "client_lama" },
+  { id: "ar3", type: "PDF", name: "Propuesta Hotel Experience", version: "v3", stage: "organize", source: "Documento", clientId: "client_hotel" },
+  { id: "ar4", type: "DASHBOARD", name: "Panel partners LINK Cupones", version: "v5", stage: "support", source: "App", clientId: "client_cupones" },
+  { id: "ar5", type: "LANDING", name: "Landing adquisición", version: "v2", stage: "activate", source: "Preview Studio", clientId: "client_lama" },
+  { id: "ar6", type: "IMAGEN", name: "Pieza campaña Brasil", version: "v3", stage: "activate", source: "Artifact", clientId: "client_lama" },
+  { id: "ar7", type: "DOCUMENTO", name: "Diagnóstico Cliente Norte", version: "v1", stage: "understand", source: "CRM", clientId: "client_norte" },
+  { id: "ar8", type: "APP", name: "Control Central Negocio", version: "base", stage: "system", source: "Vercel" },
+];
+
+export const GATEWAYS: Gateway[] = [
+  { id: "chatgpt", name: "ChatGPT / MCP", description: "Interfaz conversacional para Central y controles por negocio.", health: "ok", permissions: ["READ", "WRITE", "TOOLS", "CONTEXT"] },
+  { id: "supabase-central", name: "Supabase · Central", description: "LINK PREVIEW evoluciona a Control Central: CRM, memoria, inteligencia, artifacts, scopes y Event Bus.", health: "ok", permissions: ["DATA", "MEMORY", "RLS", "EVENTS"] },
+  { id: "supabase-operational", name: "Supabase · Operación", description: "Proyecto especializado de Hotel Experience / turismo. Central lo consulta solamente por Gateway.", health: "ok", permissions: ["READ_SCOPED", "OPERATIONS", "FINANCE"] },
+  { id: "github", name: "GitHub", description: "Código, versionado técnico y fuente de verdad de la aplicación.", health: "ok", permissions: ["READ", "COMMIT", "BRANCH"] },
+  { id: "vercel", name: "Vercel", description: "Preview, producción y salud de despliegues.", health: "warning", permissions: ["DEPLOY", "STATUS", "LOGS"] },
+  { id: "workspace", name: "Google Workspace", description: "Calendario, archivos, documentos y continuidad operacional.", health: "ok", permissions: ["CALENDAR", "DRIVE", "MAIL"] },
+  { id: "cloudinary", name: "Cloudinary", description: "Capa de medios para imágenes, video y artifacts visuales.", health: "ok", permissions: ["MEDIA", "DELIVERY"] },
+  { id: "partner", name: "Partner / Alianza", description: "Adaptador neutro para futuras apps, operadores, hoteles, pagos o APIs.", health: "offline", permissions: ["SCOPED", "AUDITED"] },
+];
+
+export const CONTROLS: ControlNode[] = [
+  { id: "root", name: "LINK CONTROL CENTRAL", scope: "root", chatgptConnection: "Central MCP", supabase: "ok", github: "ok", vercel: "ok", mcp: "ok", owner: "LINK CONTROL CENTRAL" },
+  { id: "link_empresa", name: "LINK Empresa", scope: "link_empresa", chatgptConnection: "Negocio MCP", supabase: "ok", github: "ok", vercel: "ok", mcp: "ok", owner: "LINK CONTROL CENTRAL" },
+  { id: "lama", name: "Lama Travelers", scope: "lama", chatgptConnection: "Negocio MCP", supabase: "ok", github: "ok", vercel: "warning", mcp: "ok", owner: "LINK CONTROL CENTRAL" },
+  { id: "hotel", name: "Hotel Experience", scope: "hotel_experience", chatgptConnection: "Negocio MCP", supabase: "ok", github: "ok", vercel: "ok", mcp: "ok", owner: "LINK CONTROL CENTRAL" },
+  { id: "cupones", name: "LINK Cupones", scope: "link_cupones", chatgptConnection: "Negocio MCP", supabase: "ok", github: "ok", vercel: "ok", mcp: "ok", owner: "LINK CONTROL CENTRAL" },
+];
