@@ -119,6 +119,7 @@ function RealClientSheet({ open, onOpenChange, plans, onDone }: { open: boolean;
 }
 
 function ChatGPTProtocolSheet({ open, onOpenChange, registry, onCopy }: { open: boolean; onOpenChange: (value: boolean) => void; registry: Registry | null; onCopy: () => void }) {
+  const centralRoute = registry?.central?.mcpEndpoint || "/mcp";
   async function copy(value: string) { await navigator.clipboard.writeText(value); onCopy(); }
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="ChatGPT" description="Protocolo oficial de LINK CONTROL para conectar ChatGPT mediante MCP.">
@@ -130,26 +131,16 @@ function ChatGPTProtocolSheet({ open, onOpenChange, registry, onCopy }: { open: 
           <div><span className="statusDot off" /><div><strong>Escritura desde ChatGPT</strong><small>Bloqueada hasta autenticar usuario y scope</small></div></div>
         </section>
 
-        <section className="protocolCard">
-          <span className="protocolNumber">01</span><div><strong>ChatGPT identifica al usuario</strong><p>El usuario debe estar autenticado en LINK CONTROL. Su membresía determina qué Control puede utilizar.</p></div>
-        </section>
-        <section className="protocolCard">
-          <span className="protocolNumber">02</span><div><strong>LINK resuelve el scope</strong><p>Central usa <code>/mcp</code>. Cada cliente usa <code>/c/&lt;slug&gt;/mcp</code>. Nunca se entrega la service role de Supabase.</p></div>
-        </section>
-        <section className="protocolCard">
-          <span className="protocolNumber">03</span><div><strong>Se registra la app MCP en ChatGPT</strong><p>En un workspace/plan compatible se habilita Developer Mode, se crea la app personalizada y se registra la URL HTTPS autorizada.</p></div>
-        </section>
-        <section className="protocolCard">
-          <span className="protocolNumber">04</span><div><strong>Prueba de conexión</strong><p>Primero <code>get_scope</code>, después <code>health</code>. Luego ChatGPT puede consultar clientes, ficha 360, trabajo y actividad.</p></div>
-        </section>
-        <section className="protocolCard">
-          <span className="protocolNumber">05</span><div><strong>Escritura</strong><p>Solo se habilita después de OAuth/autorización por usuario y Control. Cada cambio debe persistir en Supabase y crear un evento.</p></div>
-        </section>
+        <section className="protocolCard"><span className="protocolNumber">01</span><div><strong>ChatGPT identifica al usuario</strong><p>El usuario debe estar autenticado en LINK CONTROL. Su membresía determina qué Control puede utilizar.</p></div></section>
+        <section className="protocolCard"><span className="protocolNumber">02</span><div><strong>LINK resuelve el scope</strong><p>Central usa <code>/mcp</code>. Cada cliente usa <code>/c/&lt;slug&gt;/mcp</code>. Nunca se entrega la service role de Supabase.</p></div></section>
+        <section className="protocolCard"><span className="protocolNumber">03</span><div><strong>Se registra la app MCP en ChatGPT</strong><p>En un workspace/plan compatible se habilita Developer Mode, se crea la app personalizada y se registra la URL HTTPS autorizada.</p></div></section>
+        <section className="protocolCard"><span className="protocolNumber">04</span><div><strong>Prueba de conexión</strong><p>Primero <code>get_scope</code>, después <code>health</code>. Luego ChatGPT puede consultar clientes, ficha 360, trabajo y actividad.</p></div></section>
+        <section className="protocolCard"><span className="protocolNumber">05</span><div><strong>Escritura</strong><p>Solo se habilita después de OAuth/autorización por usuario y Control. Cada cambio debe persistir en Supabase y crear un evento.</p></div></section>
 
         <div className="protocolTools"><strong>Herramientas MCP actuales</strong><div>{(registry?.tools || ["get_scope","health","search_clients","get_client_360","list_work_items","list_activity"]).map(tool => <span key={tool}>{tool}</span>)}</div></div>
 
         <div className="protocolEndpoints">
-          <div className="endpointRow"><div><strong>Central</strong><small>scope root</small></div><code>{registry?.central?.mcpEndpoint || `${window.location.origin}/mcp`}</code><button className="btn" onClick={() => void copy(registry?.central?.mcpEndpoint || `${window.location.origin}/mcp`)}>Copiar ruta</button></div>
+          <div className="endpointRow"><div><strong>Central</strong><small>scope root</small></div><code>{centralRoute}</code><button className="btn" onClick={() => void copy(centralRoute)}>Copiar ruta</button></div>
           {(registry?.controls || []).map(item => <div className="endpointRow" key={item.scope}><div><strong>{item.name}</strong><small>{item.scope}</small></div><code>{item.mcpEndpoint}</code><button className="btn" onClick={() => void copy(item.mcpEndpoint)}>Copiar ruta</button></div>)}
         </div>
 
