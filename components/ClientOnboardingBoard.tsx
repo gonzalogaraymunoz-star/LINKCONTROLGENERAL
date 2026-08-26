@@ -107,7 +107,12 @@ export default function ClientOnboardingBoard() {
         if (next) setExpandedKey(next.stage_key);
       }
     } catch (err) {
-      setError(err instanceof Error && err.message === "checklist_incomplete" ? "Completa el checklist obligatorio antes de cerrar esta etapa." : err instanceof Error ? err.message : "No fue posible guardar");
+      const message = err instanceof Error ? err.message : "No fue posible guardar";
+      setError(message === "checklist_incomplete"
+        ? "Completa el checklist obligatorio antes de cerrar esta etapa."
+        : message === "missions_incomplete"
+          ? "Completa las misiones marcadas como Acción obligatoria antes de cerrar esta etapa."
+          : message);
     } finally { setSaving(null); }
   }
 
