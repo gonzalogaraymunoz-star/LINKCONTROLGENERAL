@@ -144,6 +144,17 @@ export async function POST(request: NextRequest) {
     const checklist = Array.isArray(body.checklist) ? body.checklist : [];
     const incomplete = checklist.filter((item: { done?: boolean }) => !item.done);
     if (incomplete.length) return NextResponse.json({ ok: false, error: "checklist_incomplete", pending: incomplete }, { status: 409 });
+
+    const { data: pendingMissions, error: missionsError } = await supabase
+      .from("work_items")
+      .select("id,title")
+      .eq("onboarding_stage_id", current.id)
+      .eq("kind", "action")
+      .neq("status", "done")
+      .neq("status", "cancelled");
+    if (missionsError) return NextResponse.json({ ok: false, error: missionsError.message }, { status: 400 });
+    if ((pendingMissions || []).length) return NextResponse.json({ ok: false, error: "missions_incomplete", pending: pendingMissions }, { status: 409 });
+
     patch.completed_at = new Date().toISOString();
   } else if (body.status !== undefined) patch.completed_at = null;
 
