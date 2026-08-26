@@ -4,7 +4,10 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [feature/control-actions-gateway]
+    branches:
+      - main
+      - "feat/**"
+      - "feature/**"
 
 jobs:
   validate:
@@ -21,6 +24,10 @@ jobs:
           cache-dependency-path: package.json
       - name: Install
         run: npm install --no-audit --no-fund
+      - name: Architecture contract
+        run: npm run validate:repo
+      - name: Lint
+        run: npm run lint
       - name: Typecheck
         run: npm run typecheck
       - name: Build
