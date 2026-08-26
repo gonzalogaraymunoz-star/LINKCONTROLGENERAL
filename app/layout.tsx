@@ -5,6 +5,7 @@ import "./complements.css";
 import "./operational.css";
 import "./actions.css";
 import "./factory.css";
+import "./verification.css";
 
 export const metadata: Metadata = {
   title: "LINK CONTROL CENTRAL",
