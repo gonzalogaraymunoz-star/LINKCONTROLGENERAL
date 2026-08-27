@@ -1,15 +1,7 @@
 "use client";
 
-import ControlActionsButton from "./ControlActionsButton";
-import LinkControlAppV4 from "./LinkControlAppV4";
-import OperationalDock from "./OperationalDock";
+import LinkControlDashboardV5 from "./LinkControlDashboardV5";
 
-export default function LinkControlApp(props: { initialScope?: string } = {}) {
-  return (
-    <>
-      <LinkControlAppV4 {...props} />
-      <OperationalDock />
-      <div className="controlActionStandalone"><ControlActionsButton /></div>
-    </>
-  );
+export default function LinkControlApp(_props: { initialScope?: string } = {}) {
+  return <LinkControlDashboardV5 />;
 }
