@@ -21,15 +21,17 @@ export async function GET() {
   ]);
 
   const integrationConnections = integrationsResult.data ?? [];
-  const gatewayMap = Object.fromEntries(capabilities.map((item) => [item.service, item]));
+  const byId = Object.fromEntries(capabilities.map((item) => [item.id, item]));
+  const centralSupabase = byId["supabase.central.health"];
+  const github = byId["github.repo.health"];
 
   const services = [
     {
       key: "supabase",
       label: "Supabase",
       role: "Memoria profunda · identidad · eventos",
-      status: gatewayMap.supabase?.available ? "connected" : "warning",
-      detail: gatewayMap.supabase?.available ? "Central conectado" : gatewayMap.supabase?.reason || "Sin verificación",
+      status: centralSupabase?.available ? "connected" : "warning",
+      detail: centralSupabase?.available ? "Memoria central conectada" : centralSupabase?.reason || "Sin verificación",
     },
     {
       key: "twenty",
@@ -42,8 +44,8 @@ export async function GET() {
       key: "github",
       label: "GitHub",
       role: "Código · versiones · arquitectura",
-      status: gatewayMap.github?.available ? "connected" : "warning",
-      detail: gatewayMap.github?.available ? "Repositorio vinculado" : gatewayMap.github?.reason || "Sin verificación",
+      status: github?.available ? "connected" : "warning",
+      detail: github?.available ? "Repositorio vinculado" : github?.reason || "Sin verificación",
     },
     {
       key: "vercel",
