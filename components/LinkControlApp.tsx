@@ -1,7 +1,7 @@
 "use client";
 
-import LinkControlDashboardV5 from "./LinkControlDashboardV5";
+import LinkControlDashboardV6 from "./LinkControlDashboardV6";
 
 export default function LinkControlApp(_props: { initialScope?: string } = {}) {
-  return <LinkControlDashboardV5 />;
+  return <LinkControlDashboardV6 />;
 }
