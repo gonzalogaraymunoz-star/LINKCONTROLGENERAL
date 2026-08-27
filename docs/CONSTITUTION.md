@@ -1,4 +1,4 @@
-# Constitución Técnica v1.1 — LINK CONTROL CENTRAL
+# Constitución Técnica v1.2 — LINK CONTROL CENTRAL
 
 ## Propósito
 LINK CONTROL CENTRAL es la autoridad raíz del ecosistema. Su función es gobernar identidades, scopes, reglas, memoria transversal, gateways y controles hijos sin absorber la operación completa de cada negocio.
@@ -25,6 +25,12 @@ LINK CONTROL CENTRAL es la autoridad raíz del ecosistema. Su función es gobern
 19. Una capacidad futura puede existir en documentación o backlog, pero no en la experiencia del usuario hasta contar con fuente de verdad, permisos, persistencia y resultado verificable.
 20. Cada función visible debe superar este contrato mínimo: **entrada real → validación → ejecución → persistencia → actualización de interfaz → evento/auditoría cuando corresponda**.
 21. Si una integración está desconectada, el sistema puede mostrar su estado técnico únicamente si ese estado proviene de una comprobación real; nunca debe fingir conexión, salud o actividad.
+22. **Aislamiento de calendario por cliente:** cada cliente debe operar con un Google Calendar propio y autorizado. Los gestos, reuniones, tareas y compromisos del cliente no se registran en el calendario personal del administrador salvo acción explícita.
+23. Cada cliente mantiene un único vínculo canónico `client_id ↔ google_calendar_id`. Ese calendario es la fuente externa de verdad para sus eventos programados.
+24. El Workspace de Calendario de CONTROL CENTRAL debe mostrar, por cliente, los mismos eventos que existan en su Google Calendar autorizado. Crear, actualizar o eliminar un gesto debe reflejarse en ambas superficies sin duplicación.
+25. Ningún evento de un cliente puede aparecer en el calendario de otro cliente. El filtro por `client_id` y `google_calendar_id` es obligatorio en lectura y escritura.
+26. Las credenciales o permisos de calendario se conceden por cliente y nunca se heredan hacia otros clientes ni se mezclan con las credenciales personales del administrador.
+27. Si el calendario de un cliente no está autorizado o no puede sincronizarse, la app debe mostrar el estado real `Calendario no conectado` y bloquear la escritura remota; nunca debe redirigir silenciosamente al calendario personal.
 
 ## Identidades
 - **Human**: administrador raíz, administrador de negocio, colaborador, cliente.
