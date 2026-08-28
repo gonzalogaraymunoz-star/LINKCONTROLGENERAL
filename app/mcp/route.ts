@@ -3,7 +3,9 @@ import { createLinkMcpHandler } from "@/lib/mcp/handler";
 import { authorizeMcpRequest, oauthChallenge } from "@/lib/mcp/access";
 
 export const maxDuration = 60;
-const handler = createLinkMcpHandler("root");
+
+const readOnlyHandler = createLinkMcpHandler("root", { writesEnabled: false });
+const readWriteHandler = createLinkMcpHandler("root", { writesEnabled: true });
 
 async function securedHandler(request: NextRequest) {
   const access = await authorizeMcpRequest(request, "root");
@@ -20,6 +22,10 @@ async function securedHandler(request: NextRequest) {
       },
     );
   }
+
+  // The legacy signed token remains read-only. The explicit LINK_MCP_TOKEN
+  // and authenticated OAuth owner sessions receive the audited write tools.
+  const handler = access.mode === "legacy" ? readOnlyHandler : readWriteHandler;
   return handler(request);
 }
 
