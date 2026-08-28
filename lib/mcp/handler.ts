@@ -1,5 +1,6 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
+import { executeControlAction } from "@/lib/actions/execute";
 import { STAGE_BY_KEY } from "@/lib/crm/stages";
 import { getCentralSupabase } from "@/lib/supabase/server";
 
@@ -21,7 +22,7 @@ async function clientsForScope(scope: string) {
 
   let query = supabase
     .from("clients")
-    .select("id,name,slug,status,short_code,accent,control_id")
+    .select("id,name,slug,status,short_code,accent,control_id,global_id,metadata")
     .eq("status", "active")
     .order("created_at");
 
@@ -36,8 +37,16 @@ function errorResult(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true };
 }
 
-export function createLinkMcpHandler(scope: string) {
+function successText(label: string, result: Record<string, unknown>) {
+  return {
+    structuredContent: { ok: true, ...result },
+    content: [{ type: "text" as const, text: label }],
+  };
+}
+
+export function createLinkMcpHandler(scope: string, options: { writesEnabled?: boolean } = {}) {
   const normalizedScope = scope || "root";
+  const writesEnabled = Boolean(options.writesEnabled && normalizedScope === "root");
 
   return createMcpHandler(
     (server) => {
@@ -45,7 +54,7 @@ export function createLinkMcpHandler(scope: string) {
         "get_scope",
         {
           title: "Get LINK Control scope",
-          description: "Use this when ChatGPT needs to confirm which LINK Control scope it is operating inside before reading business data.",
+          description: "Use this when ChatGPT needs to confirm which LINK Control scope it is operating inside before reading or changing business data.",
           inputSchema: z.object({}),
           annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
         },
@@ -57,10 +66,10 @@ export function createLinkMcpHandler(scope: string) {
                 control: normalizedScope === "root" ? "LINK CONTROL CENTRAL" : normalizedSlug(normalizedScope),
                 scope: normalizedScope,
                 dataMode: "supabase-live",
-                writesEnabled: false,
+                writesEnabled,
                 clientCount: clients.length,
               },
-              content: [{ type: "text", text: `LINK Control scope ${normalizedScope} is connected to live Supabase data in read-only MCP mode.` }],
+              content: [{ type: "text", text: `LINK Control scope ${normalizedScope} is connected to live Supabase data. Write actions are ${writesEnabled ? "enabled" : "disabled"}.` }],
             };
           } catch (error) {
             return errorResult(error instanceof Error ? error.message : "Unable to resolve LINK Control scope.");
@@ -89,12 +98,13 @@ export function createLinkMcpHandler(scope: string) {
                 app: "ok",
                 mcp: "ok",
                 supabase: "ok",
-                dataMode: "live-read-only",
+                dataMode: writesEnabled ? "live-read-write" : "live-read-only",
+                writesEnabled,
                 clients: clients.length,
                 workItems: count ?? 0,
                 timestamp: new Date().toISOString(),
               },
-              content: [{ type: "text", text: `LINK Control ${normalizedScope} and Supabase are reachable. MCP writes remain disabled until authenticated authorization is added.` }],
+              content: [{ type: "text", text: `LINK Control ${normalizedScope} and Supabase are reachable. MCP writes are ${writesEnabled ? "enabled for authenticated requests" : "disabled for this credential"}.` }],
             };
           } catch (error) {
             return errorResult(error instanceof Error ? error.message : "LINK Control health check failed.");
@@ -115,7 +125,7 @@ export function createLinkMcpHandler(scope: string) {
             const { supabase, clients } = await clientsForScope(normalizedScope);
             if (!supabase) return errorResult("Supabase is not configured.");
             const q = query?.toLowerCase();
-            const filtered = clients.filter((client) => !q || String(client.name ?? "").toLowerCase().includes(q));
+            const filtered = clients.filter((client) => !q || String(client.name ?? "").toLowerCase().includes(q) || String(client.global_id ?? "").toLowerCase().includes(q));
             const ids = filtered.map((client) => String(client.id));
             let cycles: Array<Record<string, unknown>> = [];
             if (ids.length) {
@@ -128,6 +138,7 @@ export function createLinkMcpHandler(scope: string) {
               const stage = String(cycle?.stage ?? "understand");
               return {
                 id: client.id,
+                globalId: client.global_id ?? null,
                 name: client.name,
                 slug: client.slug,
                 stage,
@@ -158,7 +169,7 @@ export function createLinkMcpHandler(scope: string) {
           try {
             const { supabase, clients } = await clientsForScope(normalizedScope);
             if (!supabase) return errorResult("Supabase is not configured.");
-            const client = clients.find((item) => String(item.id) === clientId || String(item.slug) === clientId || String(item.name).toLowerCase() === clientId.toLowerCase());
+            const client = clients.find((item) => String(item.id) === clientId || String(item.global_id ?? "") === clientId || String(item.slug) === clientId || String(item.name).toLowerCase() === clientId.toLowerCase());
             if (!client) return errorResult(`Client ${clientId} is outside scope ${normalizedScope} or does not exist.`);
 
             const { data: cycle, error: cycleError } = await supabase
@@ -203,6 +214,34 @@ export function createLinkMcpHandler(scope: string) {
       );
 
       server.registerTool(
+        "list_projects",
+        {
+          title: "List connected LINK projects",
+          description: "Use this when the user wants to see the projects or business apps connected to clients in CONTROL CENTRAL.",
+          inputSchema: z.object({ clientId: z.string().optional() }),
+          annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+        },
+        async ({ clientId }) => {
+          try {
+            const { supabase, clients } = await clientsForScope(normalizedScope);
+            if (!supabase) return errorResult("Supabase is not configured.");
+            const allowedIds = clients.map((item) => String(item.id));
+            if (!allowedIds.length) return successText("No projects are available in this scope.", { scope: normalizedScope, projects: [] });
+            let query = supabase.from("projects").select("id,client_id,name,slug,description,status,kind,phase,metadata,updated_at").in("client_id", allowedIds).eq("status", "active").order("created_at");
+            if (clientId) query = query.eq("client_id", clientId);
+            const { data, error } = await query;
+            if (error) throw new Error(error.message);
+            return {
+              structuredContent: { scope: normalizedScope, projects: data ?? [] },
+              content: [{ type: "text", text: `Found ${(data ?? []).length} connected projects.` }],
+            };
+          } catch (error) {
+            return errorResult(error instanceof Error ? error.message : "Unable to list projects.");
+          }
+        },
+      );
+
+      server.registerTool(
         "list_work_items",
         {
           title: "List LINK work items",
@@ -228,6 +267,77 @@ export function createLinkMcpHandler(scope: string) {
             };
           } catch (error) {
             return errorResult(error instanceof Error ? error.message : "Unable to list work items.");
+          }
+        },
+      );
+
+      server.registerTool(
+        "search_memory",
+        {
+          title: "Search CONTROL CENTRAL deep memory",
+          description: "Use this when the user wants to recall decisions, facts, instructions, constraints or other deep memory linked to clients in CONTROL CENTRAL.",
+          inputSchema: z.object({ query: z.string().trim().min(1), clientId: z.string().optional(), limit: z.number().int().min(1).max(50).default(20) }),
+          annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+        },
+        async ({ query, clientId, limit }) => {
+          try {
+            const { supabase, clients } = await clientsForScope(normalizedScope);
+            if (!supabase) return errorResult("Supabase is not configured.");
+            const selectedClients = clientId
+              ? clients.filter((client) => String(client.id) === clientId || String(client.global_id ?? "") === clientId || String(client.slug) === clientId || String(client.name).toLowerCase() === clientId.toLowerCase())
+              : clients;
+            const scopeKeys = selectedClients.map((client) => String(client.global_id || client.id));
+            if (!scopeKeys.length) return successText("No memory namespaces are available for this scope.", { scope: normalizedScope, memories: [] });
+            const { data: namespaces, error: namespaceError } = await supabase.from("memory_namespaces").select("id,scope_type,scope_key,label").eq("scope_type", "client").in("scope_key", scopeKeys);
+            if (namespaceError) throw new Error(namespaceError.message);
+            const namespaceIds = (namespaces ?? []).map((item) => item.id);
+            if (!namespaceIds.length) return successText("No deep memories are stored for the selected clients yet.", { scope: normalizedScope, memories: [] });
+            const escaped = query.replaceAll("%", "\\%").replaceAll("_", "\\_");
+            const { data, error } = await supabase
+              .from("deep_memories")
+              .select("id,namespace_id,memory_key,kind,content,importance,source,source_ref,structured_data,metadata,created_at,updated_at")
+              .in("namespace_id", namespaceIds)
+              .is("archived_at", null)
+              .or(`memory_key.ilike.%${escaped}%,content.ilike.%${escaped}%`)
+              .order("importance", { ascending: false })
+              .order("updated_at", { ascending: false })
+              .limit(limit);
+            if (error) throw new Error(error.message);
+            return {
+              structuredContent: { scope: normalizedScope, query, memories: data ?? [], namespaces: namespaces ?? [] },
+              content: [{ type: "text", text: `Found ${(data ?? []).length} deep memories matching "${query}".` }],
+            };
+          } catch (error) {
+            return errorResult(error instanceof Error ? error.message : "Unable to search deep memory.");
+          }
+        },
+      );
+
+      server.registerTool(
+        "get_integrations",
+        {
+          title: "Get CONTROL CENTRAL integrations",
+          description: "Use this when the user wants to know which external systems are connected and the current synchronization status.",
+          inputSchema: z.object({}),
+          annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+        },
+        async () => {
+          try {
+            const { supabase, clients } = await clientsForScope(normalizedScope);
+            if (!supabase) return errorResult("Supabase is not configured.");
+            const [{ data: connections, error: connectionError }, { data: bindings, error: bindingError }] = await Promise.all([
+              supabase.from("integration_connections").select("id,provider,connection_key,mode,status,last_seen_at,last_error,metadata,updated_at").order("provider"),
+              supabase.from("integration_bindings").select("id,control_id,provider,global_id,entity_type,external_object,external_id,source_app,sync_status,last_synced_at,metadata,updated_at").order("provider"),
+            ]);
+            if (connectionError || bindingError) throw new Error(connectionError?.message || bindingError?.message || "integration_query_failed");
+            const allowedGlobalIds = new Set(clients.map((client) => String(client.global_id ?? "")).filter(Boolean));
+            const scopedBindings = normalizedScope === "root" ? bindings ?? [] : (bindings ?? []).filter((binding) => allowedGlobalIds.has(String(binding.global_id ?? "")));
+            return {
+              structuredContent: { scope: normalizedScope, connections: connections ?? [], bindings: scopedBindings },
+              content: [{ type: "text", text: `CONTROL CENTRAL has ${(connections ?? []).length} integration connections and ${scopedBindings.length} entity bindings visible in this scope.` }],
+            };
+          } catch (error) {
+            return errorResult(error instanceof Error ? error.message : "Unable to load integrations.");
           }
         },
       );
@@ -261,10 +371,165 @@ export function createLinkMcpHandler(scope: string) {
           }
         },
       );
+
+      if (writesEnabled) {
+        server.registerTool(
+          "create_client",
+          {
+            title: "Create CONTROL CENTRAL client",
+            description: "Use this only when the user explicitly asks to create a new client identity in LINK CONTROL CENTRAL. The action writes to Supabase and is audited in the command and event buses.",
+            inputSchema: z.object({
+              name: z.string().trim().min(1),
+              slug: z.string().trim().optional(),
+              shortCode: z.string().trim().max(5).optional(),
+              accent: z.string().trim().optional(),
+              globalId: z.string().trim().optional(),
+              metadata: z.record(z.string(), z.unknown()).optional(),
+            }),
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+          },
+          async (input) => {
+            try {
+              const execution = await executeControlAction("client.create", input, { actor: "chatgpt-mcp", entityType: "client", globalId: input.globalId || null });
+              return successText(`Created client ${input.name} in LINK CONTROL CENTRAL.`, execution as unknown as Record<string, unknown>);
+            } catch (error) {
+              return errorResult(error instanceof Error ? error.message : "Unable to create client.");
+            }
+          },
+        );
+
+        server.registerTool(
+          "update_client",
+          {
+            title: "Update CONTROL CENTRAL client",
+            description: "Use this when the user explicitly asks to change a client's name, short code, accent, status or metadata in CONTROL CENTRAL.",
+            inputSchema: z.object({
+              clientRef: z.string().trim().min(1),
+              name: z.string().trim().min(1).optional(),
+              shortCode: z.string().trim().max(5).optional(),
+              accent: z.string().trim().optional(),
+              status: z.enum(["active", "archived"]).optional(),
+              metadata: z.record(z.string(), z.unknown()).optional(),
+            }),
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+          },
+          async (input) => {
+            try {
+              const execution = await executeControlAction("client.update", input, { actor: "chatgpt-mcp", entityType: "client" });
+              return successText(`Updated client ${input.clientRef}.`, execution as unknown as Record<string, unknown>);
+            } catch (error) {
+              return errorResult(error instanceof Error ? error.message : "Unable to update client.");
+            }
+          },
+        );
+
+        server.registerTool(
+          "archive_client",
+          {
+            title: "Archive CONTROL CENTRAL client",
+            description: "Use this only when the user explicitly asks to archive a client. This does not delete the client's memory or historical records.",
+            inputSchema: z.object({ clientRef: z.string().trim().min(1) }),
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+          },
+          async (input) => {
+            try {
+              const execution = await executeControlAction("client.archive", input, { actor: "chatgpt-mcp", entityType: "client" });
+              return successText(`Archived client ${input.clientRef} without deleting its memory.`, execution as unknown as Record<string, unknown>);
+            } catch (error) {
+              return errorResult(error instanceof Error ? error.message : "Unable to archive client.");
+            }
+          },
+        );
+
+        server.registerTool(
+          "connect_project",
+          {
+            title: "Connect project to client",
+            description: "Use this when the user explicitly asks to connect a business, app or project to an existing CONTROL CENTRAL client.",
+            inputSchema: z.object({
+              clientRef: z.string().trim().min(1),
+              projectName: z.string().trim().min(1),
+              slug: z.string().trim().optional(),
+              description: z.string().trim().optional(),
+              kind: z.string().trim().optional(),
+              phase: z.string().trim().optional(),
+              metadata: z.record(z.string(), z.unknown()).optional(),
+            }),
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          },
+          async (input) => {
+            try {
+              const execution = await executeControlAction("project.connect", input, { actor: "chatgpt-mcp", entityType: "project" });
+              return successText(`Connected ${input.projectName} to ${input.clientRef}.`, execution as unknown as Record<string, unknown>);
+            } catch (error) {
+              return errorResult(error instanceof Error ? error.message : "Unable to connect project.");
+            }
+          },
+        );
+
+        server.registerTool(
+          "create_work_item",
+          {
+            title: "Create CONTROL CENTRAL work item",
+            description: "Use this when the user explicitly asks to create a task, action or gesture in CONTROL CENTRAL for a client or the root workspace.",
+            inputSchema: z.object({
+              clientRef: z.string().trim().optional(),
+              title: z.string().trim().min(1),
+              description: z.string().trim().optional(),
+              kind: z.enum(["action", "task", "gesture"]).default("task"),
+              stage: z.enum(["understand", "organize", "build", "activate", "support", "scale"]).optional(),
+              dueAt: z.string().trim().optional(),
+              priority: z.number().int().min(1).max(4).default(2),
+              cycleId: z.string().trim().optional(),
+              strategyId: z.string().trim().optional(),
+              onboardingStageId: z.string().trim().optional(),
+              metadata: z.record(z.string(), z.unknown()).optional(),
+            }),
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+          },
+          async (input) => {
+            try {
+              const execution = await executeControlAction("work_item.create", input, { actor: "chatgpt-mcp", entityType: "work_item" });
+              return successText(`Created ${input.kind} "${input.title}" in CONTROL CENTRAL.`, execution as unknown as Record<string, unknown>);
+            } catch (error) {
+              return errorResult(error instanceof Error ? error.message : "Unable to create work item.");
+            }
+          },
+        );
+
+        server.registerTool(
+          "remember_memory",
+          {
+            title: "Store CONTROL CENTRAL deep memory",
+            description: "Use this when the user explicitly asks to save a durable fact, decision, instruction, constraint or relationship in the deep memory of a CONTROL CENTRAL client.",
+            inputSchema: z.object({
+              clientRef: z.string().trim().min(1),
+              memoryKey: z.string().trim().min(1),
+              content: z.string().trim().min(1),
+              kind: z.enum(["fact", "preference", "instruction", "decision", "constraint", "summary", "relationship", "other"]).default("fact"),
+              importance: z.number().int().min(1).max(5).default(3),
+              sourceRef: z.string().trim().optional(),
+              structuredData: z.record(z.string(), z.unknown()).optional(),
+              metadata: z.record(z.string(), z.unknown()).optional(),
+            }),
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+          },
+          async (input) => {
+            try {
+              const execution = await executeControlAction("memory.remember", input, { actor: "chatgpt-mcp", entityType: "memory" });
+              return successText(`Stored deep memory "${input.memoryKey}" for ${input.clientRef}.`, execution as unknown as Record<string, unknown>);
+            } catch (error) {
+              return errorResult(error instanceof Error ? error.message : "Unable to store deep memory.");
+            }
+          },
+        );
+      }
     },
     {
-      serverInfo: { name: `link-control-${normalizedScope}`, version: "0.4.0" },
-      instructions: "This MCP reads live LINK Control data from Supabase. Confirm scope before answering. Do not claim or attempt writes: MCP write tools are intentionally disabled until authenticated authorization is implemented. Never infer data outside the active scope.",
+      serverInfo: { name: `link-control-${normalizedScope}`, version: "1.0.0" },
+      instructions: writesEnabled
+        ? "This MCP is the authenticated root interface for LINK CONTROL CENTRAL. Read live data from Supabase and use write tools only when the user explicitly requests the change. All writes are audited through command_bus and event_bus. Never infer client identifiers when more than one match is possible."
+        : "This MCP reads live LINK Control data from Supabase. Confirm scope before answering. Write tools are not exposed for this credential. Never infer data outside the active scope.",
     },
   );
 }
