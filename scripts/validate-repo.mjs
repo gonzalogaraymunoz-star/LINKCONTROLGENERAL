@@ -28,7 +28,7 @@ if (missing.length) {
 }
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
-if (packageJson.version !== "0.2.0") {
+if (packageJson.version !== "0.4.0") {
   console.error(`Unexpected version: ${packageJson.version}`);
   process.exit(1);
 }
@@ -55,6 +55,6 @@ for (const token of [
   }
 }
 
-console.log("LINK CONTROL v0.2 repo contract: OK");
+console.log(`LINK CONTROL v${packageJson.version} repo contract: OK`);
 console.log(`Required files checked: ${required.length}`);
 console.log("Migration strategy: additive upgrade of LINK PREVIEW");
