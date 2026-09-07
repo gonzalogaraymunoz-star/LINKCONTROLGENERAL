@@ -1,6 +1,19 @@
-import "./unified.css";
-import ControlCentralUnified from "@/components/ControlCentralUnified";
+import LinkControlApp from "@/components/LinkControlApp";
+import Ficha360QuickAccess from "@/components/Ficha360QuickAccess";
+import DashboardPersonalMissionHero from "@/components/DashboardPersonalMissionHero";
+import LinkThemeController from "@/components/LinkThemeController";
+import UnifiedWorkBoard from "@/components/UnifiedWorkBoard";
+import ControlCentralUXBridge from "@/components/ControlCentralUXBridge";
 
 export default function Home() {
-  return <ControlCentralUnified />;
+  return (
+    <>
+      <LinkControlApp />
+      <LinkThemeController />
+      <ControlCentralUXBridge />
+      <DashboardPersonalMissionHero />
+      <UnifiedWorkBoard />
+      <Ficha360QuickAccess />
+    </>
+  );
 }
