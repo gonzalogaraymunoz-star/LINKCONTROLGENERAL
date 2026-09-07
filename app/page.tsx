@@ -4,6 +4,7 @@ import DashboardPersonalMissionHero from "@/components/DashboardPersonalMissionH
 import LinkThemeController from "@/components/LinkThemeController";
 import UnifiedWorkBoard from "@/components/UnifiedWorkBoard";
 import ControlCentralUXBridge from "@/components/ControlCentralUXBridge";
+import ActivityHumanizer from "@/components/ActivityHumanizer";
 
 export default function Home() {
   return (
@@ -11,6 +12,7 @@ export default function Home() {
       <LinkControlApp />
       <LinkThemeController />
       <ControlCentralUXBridge />
+      <ActivityHumanizer />
       <DashboardPersonalMissionHero />
       <UnifiedWorkBoard />
       <Ficha360QuickAccess />
