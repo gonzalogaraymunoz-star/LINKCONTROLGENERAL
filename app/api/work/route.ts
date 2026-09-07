@@ -13,13 +13,15 @@ export async function GET(request:Request){
   if(!supabase)return NextResponse.json({ok:false,error:"central_supabase_not_configured"},{status:503});
   const url=new URL(request.url);
   const attention=url.searchParams.get("attention")==="1";
-  const [{data:gestures,error},{data:sessions},{data:clients},{data:progress}]=await Promise.all([
+  const [gestureResult,sessionResult,clientResult,progressResult]=await Promise.all([
     supabase.from("client_gestures").select("id,control_id,client_id,title,description,gesture_type,status,starts_at,ends_at,timezone,priority,source,metadata,scope,planned_minutes,actual_started_at,actual_completed_at,accumulated_seconds,outcome,is_money,sort_order,created_at,updated_at").neq("status","cancelled").order("starts_at",{ascending:true,nullsFirst:false}),
     supabase.from("work_sessions").select("id,gesture_id,started_at,ended_at,elapsed_seconds,planned_minutes,status,note,outcome,created_at").order("started_at",{ascending:false}).limit(200),
     supabase.from("clients").select("id,name,slug,accent,status").eq("status","active"),
-    supabase.from("daily_progress").select("*").eq("progress_date",localDate()).maybeSingle(),
+    supabase.from("daily_progress").select("*").eq("control_id",ROOT_CONTROL_ID).eq("progress_date",localDate()).maybeSingle(),
   ]);
+  const error=gestureResult.error||sessionResult.error||clientResult.error||progressResult.error;
   if(error)return NextResponse.json({ok:false,error:error.message},{status:500});
+  const gestures=gestureResult.data,sessions=sessionResult.data,clients=clientResult.data,progress=progressResult.data;
   const cmap=Object.fromEntries((clients||[]).map((c:any)=>[c.id,c]));
   const now=Date.now();
   const rows=(gestures||[]).map((g:any)=>{
@@ -51,6 +53,8 @@ export async function POST(request:Request){
     }
     const start=body.startsAt?new Date(body.startsAt):null;
     const end=body.endsAt?new Date(body.endsAt):start?new Date(start.getTime()+Number(body.plannedMinutes||30)*60000):null;
+    if((start&&Number.isNaN(start.getTime()))||(end&&Number.isNaN(end.getTime())))return NextResponse.json({ok:false,error:"invalid_schedule"},{status:400});
+    if(start&&end&&end<=start)return NextResponse.json({ok:false,error:"end_must_be_after_start"},{status:400});
     const {data,error}=await supabase.from("client_gestures").insert({
       control_id:client?.control_id||ROOT_CONTROL_ID,client_id:client?.id||null,calendar_workspace_id:workspace?.id||null,
       title,description:body.description||null,gesture_type:"task",status:"planned",starts_at:start?.toISOString()||null,ends_at:end?.toISOString()||null,
@@ -64,6 +68,11 @@ export async function POST(request:Request){
 
   if(action==="update"||action==="complete"){
     const id=String(body.id||""); if(!id)return NextResponse.json({ok:false,error:"id_required"},{status:400});
+    if(action==="complete"){
+      const current=await supabase.from("client_gestures").select("*").eq("id",id).single();
+      if(current.error||!current.data)return NextResponse.json({ok:false,error:"work_not_found"},{status:404});
+      if(current.data.status==="completed")return NextResponse.json({ok:true,item:current.data,alreadyCompleted:true});
+    }
     const patch:any={updated_at:new Date().toISOString()};
     if(body.title!==undefined)patch.title=String(body.title).trim();
     if(body.description!==undefined)patch.description=body.description||null;
