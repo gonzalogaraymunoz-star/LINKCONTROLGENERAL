@@ -23,8 +23,11 @@ export async function POST(request:Request){
     const gestureId=String(body.gestureId||""); if(!gestureId)return NextResponse.json({ok:false,error:"gestureId_required"},{status:400});
     const {data:g,error:ge}=await supabase.from("client_gestures").select("id,control_id,status,actual_started_at,planned_minutes").eq("id",gestureId).single();
     if(ge||!g)return NextResponse.json({ok:false,error:"work_not_found"},{status:404});
-    const existing=await supabase.from("work_sessions").select("id").eq("gesture_id",gestureId).eq("status","running").maybeSingle();
-    if(existing.data)return NextResponse.json({ok:true,session:existing.data,alreadyRunning:true});
+    if(g.status==="completed"||g.status==="cancelled")return NextResponse.json({ok:false,error:"work_not_open"},{status:409});
+    const existing=await supabase.from("work_sessions").select("id,gesture_id").eq("control_id",g.control_id||ROOT_CONTROL_ID).eq("status","running").order("started_at",{ascending:false}).limit(1).maybeSingle();
+    if(existing.error)return NextResponse.json({ok:false,error:existing.error.message},{status:500});
+    if(existing.data?.gesture_id===gestureId)return NextResponse.json({ok:true,session:existing.data,alreadyRunning:true});
+    if(existing.data)return NextResponse.json({ok:false,error:"active_session_exists",activeGestureId:existing.data.gesture_id},{status:409});
     const planned=Number(body.plannedMinutes||g.planned_minutes||30);
     const now=new Date().toISOString();
     const {data,error}=await supabase.from("work_sessions").insert({control_id:g.control_id||ROOT_CONTROL_ID,gesture_id:gestureId,planned_minutes:planned,status:"running",started_at:now}).select("*").single();
