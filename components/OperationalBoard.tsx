@@ -280,6 +280,20 @@ export default function OperationalBoard() {
     setSearch("");
   }
 
+  function goToday() {
+    const now = new Date();
+    setActiveDate(now);
+    setFilters((current) => ({
+      ...current,
+      date: "today",
+      customStart: "",
+      customEnd: "",
+    }));
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
   return (
     <main className={styles.boardPage}>
       <header className={styles.topbar}>
@@ -301,10 +315,19 @@ export default function OperationalBoard() {
           <span>⌕</span>
           <input value={search} onChange={(event)=>setSearch(event.target.value)} placeholder="Buscar gesto, negocio, Link, producto, responsable…" />
         </div>
-        <div className={styles.views}>
-          <button className={viewMode==="list"?styles.activeView:""} onClick={()=>setViewMode("list")}>Lista</button>
-          <button className={viewMode==="calendar"?styles.activeView:""} onClick={()=>setViewMode("calendar")}>Calendario</button>
-          <button className={viewMode==="kanban"?styles.activeView:""} onClick={()=>setViewMode("kanban")}>Kanban</button>
+        <div className={styles.toolbarActions}>
+          <button
+            className={styles.todayButton + (filters.date === "today" ? " " + styles.todayButtonActive : "")}
+            onClick={goToday}
+            title="Mostrar las acciones de hoy"
+          >
+            HOY
+          </button>
+          <div className={styles.views}>
+            <button className={viewMode==="list"?styles.activeView:""} onClick={()=>setViewMode("list")}>Lista</button>
+            <button className={viewMode==="calendar"?styles.activeView:""} onClick={()=>setViewMode("calendar")}>Calendario</button>
+            <button className={viewMode==="kanban"?styles.activeView:""} onClick={()=>setViewMode("kanban")}>Kanban</button>
+          </div>
         </div>
       </section>
 
