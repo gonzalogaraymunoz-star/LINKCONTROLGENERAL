@@ -1,5 +1,5 @@
-import GestureTaskApp from "@/components/GestureTaskApp";
+import OperationSummary from "@/components/OperationSummary";
 
 export default function OperationHome() {
-  return <GestureTaskApp />;
+  return <OperationSummary />;
 }
