@@ -392,6 +392,7 @@ export default function LinkWorldDashboard() {
         isDraggable={editing}
         isResizable={editing}
         draggableHandle=".lw-widget-drag"
+        draggableCancel=".lw-widget-tools, .lw-personal-strip a"
         onLayoutChange={(_current, next) => setLayouts(next as GridLayouts)}
       >
         {effectiveVisibleWidgets.includes("clients") ? (
