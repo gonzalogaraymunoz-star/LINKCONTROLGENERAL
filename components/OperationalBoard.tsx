@@ -349,7 +349,7 @@ export default function OperationalBoard() {
           task={selectedTask}
           close={()=>setSelectedTask(null)}
           save={(payload)=>post({action:"update",id:selectedTask.id,...payload}).then(()=>setSelectedTask(null))}
-          move={(target)=>requestMove(selectedTask.id,target)}
+          move={(target)=>{ const taskId=selectedTask.id; setSelectedTask(null); requestMove(taskId,target); }}
           busy={busy===selectedTask.id}
         />
       ) : null}
