@@ -16,6 +16,11 @@ type GestureTask = {
   note?: string | null;
   status: "open" | "done" | "snoozed" | "cancelled";
   priority: number;
+  task_kind?: string | null;
+  financial_state?: string | null;
+  requires_document?: boolean | null;
+  transaction_id?: string | null;
+  closure_id?: string | null;
   due_at?: string | null;
   origin_event_type?: string | null;
   created_at: string;
@@ -29,7 +34,7 @@ type TaskResponse = {
   counts: { open: number; done: number; world: number };
 };
 
-type Filter = "open" | "done" | "all";
+type Filter = "open" | "finance" | "done" | "all";
 
 export default function GestureTaskApp() {
   const [data, setData] = useState<TaskResponse | null>(null);
@@ -57,6 +62,7 @@ export default function GestureTaskApp() {
     if (!data) return [];
     return data.tasks.filter((task) => {
       if (filter === "open" && task.status === "done") return false;
+      if (filter === "finance" && !["financial_transaction","financial_closure"].includes(String(task.task_kind || ""))) return false;
       if (filter === "done" && task.status !== "done") return false;
       if (worldOnly && task.source_domain !== "world") return false;
       return true;
@@ -154,6 +160,9 @@ export default function GestureTaskApp() {
             <button className={filter === "open" ? "on" : ""} onClick={() => setFilter("open")}>
               Pendientes <span>{data?.counts.open || 0}</span>
             </button>
+            <button className={filter === "finance" ? "on" : ""} onClick={() => setFilter("finance")}>
+              Finanzas <span>{data?.tasks.filter((task) => ["financial_transaction","financial_closure"].includes(String(task.task_kind || "")) && task.status !== "done").length || 0}</span>
+            </button>
             <button className={filter === "done" ? "on" : ""} onClick={() => setFilter("done")}>
               Completadas <span>{data?.counts.done || 0}</span>
             </button>
@@ -216,14 +225,14 @@ function GestureRow({
       <button className="gt-row-copy" onClick={() => setOpen((current) => !current)}>
         <b>{task.title}</b>
         <span>
-          {task.source_domain === "world" ? "LINK WORLD" : "CONTROL CENTRAL"}
+          {task.task_kind === "financial_closure" ? "CIERRE FINANCIERO" : task.task_kind === "financial_transaction" ? "FINANZAS" : task.source_domain === "world" ? "LINK WORLD" : "CONTROL CENTRAL"}
           {task.entity_name ? " · " + task.entity_name : ""}
           {task.origin_event_type ? " · " + humanize(task.origin_event_type) : ""}
         </span>
       </button>
 
       <div className="gt-row-meta">
-        {task.due_at ? <time>{formatDue(task.due_at)}</time> : null}
+        {task.financial_state ? <time>{humanize(task.financial_state)}</time> : task.due_at ? <time>{formatDue(task.due_at)}</time> : null}
         <span className={task.source_domain === "world" ? "world" : "control"}>
           {task.source_domain === "world" ? "↓" : "↑"}
         </span>
@@ -232,6 +241,7 @@ function GestureRow({
 
       {open ? (
         <div className="gt-detail">
+          {task.task_kind?.startsWith("financial_") ? <div><small>TIPO</small><b>{task.task_kind === "financial_closure" ? "Cierre financiero" : "Transacción"}</b></div> : null}
           <div>
             <small>GESTO</small>
             <code>{task.gesture_code}</code>
