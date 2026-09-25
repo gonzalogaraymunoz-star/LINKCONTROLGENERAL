@@ -216,7 +216,7 @@ export async function GET() {
   try {
     await syncLinkWorldGestures(supabase);
 
-    const [tasksResult, businessesResult, clientsResult, productsResult] = await Promise.all([
+    const [tasksResult, businessesResult, clientsResult, productsResult, agendaResult] = await Promise.all([
       supabase.from("gesture_tasks")
         .select("*")
         .neq("status", "cancelled")
@@ -227,9 +227,14 @@ export async function GET() {
       supabase.from("link_world_businesses").select("id,name,global_id,verification_status,summary"),
       supabase.from("link_world_clients").select("id,name,global_id,business_id,role,relationship_state,agreement_status,summary,owned_facts"),
       supabase.from("link_world_products").select("id,name,global_id,business_id,client_id,stage,economic_state,public_price,acquisition_price,link_share_percent"),
+      supabase.from("link_world_calendar_events")
+        .select("id,title,description,starts_at,ends_at,event_url,event_kind,business_id,business_global_id,gesture_code,source_id")
+        .gte("ends_at", new Date().toISOString())
+        .order("starts_at", { ascending: true })
+        .limit(60),
     ]);
 
-    const firstError = [tasksResult.error, businessesResult.error, clientsResult.error, productsResult.error].find(Boolean);
+    const firstError = [tasksResult.error, businessesResult.error, clientsResult.error, productsResult.error, agendaResult.error].find(Boolean);
     if (firstError) return NextResponse.json({ ok: false, error: firstError.message }, { status: 500 });
 
     const entityNames = new Map<string, string>();
@@ -272,10 +277,13 @@ export async function GET() {
       ok: true,
       generatedAt: new Date().toISOString(),
       tasks,
+      agenda: agendaResult.data || [],
       counts: {
-        open: tasks.filter((task) => task.status === "open").length,
+        open: tasks.filter((task) => task.status === "open" && !task.due_at).length,
+        scheduled: tasks.filter((task) => task.status === "open" && task.due_at).length,
         done: tasks.filter((task) => task.status === "done").length,
         world: tasks.filter((task) => task.source_domain === "world").length,
+        agenda: (agendaResult.data || []).length,
       },
     });
   } catch (reason) {
@@ -355,7 +363,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, task }, { status: 201 });
     }
 
-    if (["complete", "reopen", "snooze", "cancel", "update"].includes(action)) {
+    if (["complete", "reopen", "schedule", "snooze", "cancel", "update"].includes(action)) {
       const id = String(body.id || "");
       if (!id) return NextResponse.json({ ok: false, error: "id_required" }, { status: 400 });
 
@@ -377,11 +385,21 @@ export async function POST(request: NextRequest) {
         patch.completed_at = null;
         eventType = "gesture.task.reopened";
         actionKey = "gesture.task.reopen";
+      } else if (action === "schedule") {
+        const dueAt = body.dueAt ? new Date(body.dueAt).toISOString() : null;
+        if (!dueAt) return NextResponse.json({ ok: false, error: "due_at_required" }, { status: 400 });
+        patch.status = "open";
+        patch.due_at = dueAt;
+        patch.schedule_status = "scheduled";
+        patch.calendar_sync_status = "pending";
+        eventType = "gesture.task.scheduled";
+        actionKey = "gesture.task.schedule";
       } else if (action === "snooze") {
-        patch.status = "snoozed";
+        patch.status = "open";
         patch.due_at = body.dueAt ? new Date(body.dueAt).toISOString() : null;
-        eventType = "gesture.task.snoozed";
-        actionKey = "gesture.task.snooze";
+        patch.schedule_status = "scheduled";
+        eventType = "gesture.task.scheduled";
+        actionKey = "gesture.task.schedule";
       } else if (action === "cancel") {
         patch.status = "cancelled";
         eventType = "gesture.task.cancelled";
