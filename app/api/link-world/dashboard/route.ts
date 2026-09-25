@@ -129,6 +129,11 @@ export async function GET() {
     organelleTypesResult,
     personalWorkResult,
     dailyProgressResult,
+    documentSpacesResult,
+    documentRoutesResult,
+    financialFollowupResult,
+    transactionsResult,
+    documentsResult,
     preferencesResult,
   ] = await Promise.all([
     supabase.from("link_world_clients")
@@ -166,6 +171,18 @@ export async function GET() {
     supabase.from("daily_progress")
       .select("body_minimum,mind_minimum,pocket_minimum,focused_seconds,tasks_completed,commercial_moves,closures")
       .eq("progress_date", today).maybeSingle(),
+    supabase.from("link_world_business_document_spaces")
+      .select("id,business_id,business_global_id,business_name,folder_id,folder_url,status"),
+    supabase.from("link_world_business_document_routes")
+      .select("id,space_id,route_key,folder_name,folder_id,folder_url"),
+    supabase.from("link_world_financial_followup")
+      .select("*"),
+    supabase.from("link_world_transactions")
+      .select("id,business_id,business_global_id,counterparty_id,product_id,status,direction,transaction_type,amount,currency,documentary_status,occurred_at,due_at,paid_at,settled_at")
+      .order("occurred_at", { ascending: false }).limit(100),
+    supabase.from("link_world_documents")
+      .select("id,business_id,transaction_id,document_type,route_key,drive_url,file_name,issue_date,amount,currency,created_at")
+      .order("created_at", { ascending: false }).limit(100),
     supabase.from("dashboard_preferences")
       .select("dashboard_key,title,visible_widgets,layouts,client_columns,widget_views,updated_at")
       .eq("dashboard_key", DASHBOARD_KEY).maybeSingle(),
@@ -184,6 +201,11 @@ export async function GET() {
     organelleTypesResult.error,
     personalWorkResult.error,
     dailyProgressResult.error,
+    documentSpacesResult.error,
+    documentRoutesResult.error,
+    financialFollowupResult.error,
+    transactionsResult.error,
+    documentsResult.error,
     preferencesResult.error,
   ].find(Boolean);
 
@@ -203,10 +225,38 @@ export async function GET() {
     productsByClient.set(product.client_id, current);
   }
 
+  const routesBySpace = new Map<string, typeof documentRoutesResult.data>();
+  for (const route of documentRoutesResult.data ?? []) {
+    const current = routesBySpace.get(route.space_id) ?? [];
+    current.push(route);
+    routesBySpace.set(route.space_id, current);
+  }
+  const documentSpaceByBusiness = new Map((documentSpacesResult.data ?? []).map((space) => [
+    space.business_id,
+    { ...space, routes: routesBySpace.get(space.id) ?? [] },
+  ]));
+  const financialByBusiness = new Map((financialFollowupResult.data ?? []).map((row) => [row.business_id, row]));
+  const transactionsByBusiness = new Map<string, typeof transactionsResult.data>();
+  for (const transaction of transactionsResult.data ?? []) {
+    const current = transactionsByBusiness.get(transaction.business_id) ?? [];
+    current.push(transaction);
+    transactionsByBusiness.set(transaction.business_id, current);
+  }
+  const documentsByBusiness = new Map<string, typeof documentsResult.data>();
+  for (const document of documentsResult.data ?? []) {
+    const current = documentsByBusiness.get(document.business_id) ?? [];
+    current.push(document);
+    documentsByBusiness.set(document.business_id, current);
+  }
+
   const clients = (clientsResult.data ?? []).map((client) => ({
     ...client,
     business: client.business_id ? businessById.get(client.business_id) ?? null : null,
     products: productsByClient.get(client.id) ?? [],
+    documentSpace: client.business_id ? documentSpaceByBusiness.get(client.business_id) ?? null : null,
+    financial: client.business_id ? financialByBusiness.get(client.business_id) ?? null : null,
+    recentTransactions: client.business_id ? (transactionsByBusiness.get(client.business_id) ?? []).slice(0, 8) : [],
+    recentDocuments: client.business_id ? (documentsByBusiness.get(client.business_id) ?? []).slice(0, 8) : [],
   }));
 
   const organelleTypeByKey = new Map((organelleTypesResult.data ?? []).map((row) => [row.organelle_key, row]));
