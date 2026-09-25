@@ -31,6 +31,11 @@ type GestureTask = {
   completed_at?: string | null;
   schedule_status?: string | null;
   calendar_sync_status?: string | null;
+  business_id?: string | null;
+  business_name?: string | null;
+  business_global_id?: string | null;
+  business_color?: string | null;
+  calendar_name?: string | null;
 };
 
 type AgendaEvent = {
@@ -41,7 +46,12 @@ type AgendaEvent = {
   ends_at: string;
   event_url?: string | null;
   event_kind?: string | null;
+  business_id?: string | null;
+  business_name?: string | null;
   business_global_id?: string | null;
+  business_color?: string | null;
+  calendar_name?: string | null;
+  priority?: number | null;
 };
 
 type TaskResponse = {
@@ -58,6 +68,10 @@ export default function GestureTaskApp() {
   const [data, setData] = useState<TaskResponse | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
   const [worldOnly, setWorldOnly] = useState(false);
+  const [businessFilter, setBusinessFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -76,18 +90,56 @@ export default function GestureTaskApp() {
     return () => window.clearInterval(id);
   }, [load]);
 
-  const visible = useMemo(() => {
+  const businessOptions = useMemo(() => {
+    if (!data) return [];
+    const map = new Map<string, { key: string; name: string; color: string }>();
+    for (const task of data.tasks) {
+      const name = task.business_name || "Sin negocio";
+      const key = task.business_global_id || "name:" + name;
+      if (!map.has(key)) map.set(key, { key, name, color: task.business_color || "#d7d4cc" });
+    }
+    for (const event of data.agenda) {
+      const name = event.business_name || event.calendar_name || "Sin negocio";
+      const key = event.business_global_id || "name:" + name;
+      if (!map.has(key)) map.set(key, { key, name, color: event.business_color || "#d7d4cc" });
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [data]);
+
+  const filteredTasks = useMemo(() => {
     if (!data) return [];
     return data.tasks.filter((task) => {
+      const businessKey = task.business_global_id || "name:" + (task.business_name || "Sin negocio");
+      const taskDate = task.due_at || task.created_at;
+      if (businessFilter !== "all" && businessKey !== businessFilter) return false;
+      if (priorityFilter !== "all" && String(task.priority) !== priorityFilter) return false;
+      if (!matchesDateFilter(taskDate, dateFilter)) return false;
+      if (worldOnly && task.source_domain !== "world") return false;
+      return true;
+    });
+  }, [data, businessFilter, dateFilter, priorityFilter, worldOnly]);
+
+  const filteredAgenda = useMemo(() => {
+    if (!data) return [];
+    return data.agenda.filter((event) => {
+      const businessKey = event.business_global_id || "name:" + (event.business_name || event.calendar_name || "Sin negocio");
+      if (businessFilter !== "all" && businessKey !== businessFilter) return false;
+      if (priorityFilter !== "all" && String(event.priority || 3) !== priorityFilter) return false;
+      if (!matchesDateFilter(event.starts_at, dateFilter)) return false;
+      return true;
+    });
+  }, [data, businessFilter, dateFilter, priorityFilter]);
+
+  const visible = useMemo(() => {
+    return filteredTasks.filter((task) => {
       if (filter === "open" && (task.status === "done" || Boolean(task.due_at))) return false;
       if (filter === "scheduled" && (task.status === "done" || !task.due_at)) return false;
       if (filter === "agenda") return false;
       if (filter === "finance" && !["financial_transaction","financial_closure"].includes(String(task.task_kind || ""))) return false;
       if (filter === "done" && task.status !== "done") return false;
-      if (worldOnly && task.source_domain !== "world") return false;
       return true;
     });
-  }, [data, filter, worldOnly]);
+  }, [filteredTasks, filter]);
 
   async function act(action: string, id: string, payload: Record<string, unknown> = {}) {
     setBusy(id);
@@ -177,41 +229,89 @@ export default function GestureTaskApp() {
 
         <div className="gt-filters">
           <div>
-            <button className={filter === "open" ? "on" : ""} onClick={() => setFilter("open")}>
+            <button className={filter === "open" && viewMode === "list" ? "on" : ""} onClick={() => { setViewMode("list"); setFilter("open"); }}>
               Pendientes <span>{data?.counts.open || 0}</span>
             </button>
-            <button className={filter === "scheduled" ? "on" : ""} onClick={() => setFilter("scheduled")}>
+            <button className={filter === "scheduled" && viewMode === "list" ? "on" : ""} onClick={() => { setViewMode("list"); setFilter("scheduled"); }}>
               Programados <span>{data?.counts.scheduled || 0}</span>
             </button>
-            <button className={filter === "agenda" ? "on" : ""} onClick={() => setFilter("agenda")}>
+            <button className={filter === "agenda" && viewMode === "list" ? "on" : ""} onClick={() => { setViewMode("list"); setFilter("agenda"); }}>
               Agenda <span>{data?.counts.agenda || 0}</span>
             </button>
-            <button className={filter === "finance" ? "on" : ""} onClick={() => setFilter("finance")}>
+            <button className={filter === "finance" && viewMode === "list" ? "on" : ""} onClick={() => { setViewMode("list"); setFilter("finance"); }}>
               Finanzas <span>{data?.tasks.filter((task) => ["financial_transaction","financial_closure"].includes(String(task.task_kind || "")) && task.status !== "done").length || 0}</span>
             </button>
-            <button className={filter === "done" ? "on" : ""} onClick={() => setFilter("done")}>
+            <button className={filter === "done" && viewMode === "list" ? "on" : ""} onClick={() => { setViewMode("list"); setFilter("done"); }}>
               Completadas <span>{data?.counts.done || 0}</span>
             </button>
-            <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>Todas</button>
+            <button className={filter === "all" && viewMode === "list" ? "on" : ""} onClick={() => { setViewMode("list"); setFilter("all"); }}>Todas</button>
           </div>
           <button className={"gt-world-filter" + (worldOnly ? " on" : "")} onClick={() => setWorldOnly((current) => !current)}>
             LINK WORLD
           </button>
         </div>
 
+        <div className="gt-filterbar">
+          <label>
+            <span>NEGOCIO</span>
+            <div className="gt-select-wrap">
+              <i style={{ background: businessFilter === "all" ? "#b8b8b2" : businessOptions.find((item) => item.key === businessFilter)?.color || "#d7d4cc" }} />
+              <select value={businessFilter} onChange={(event) => setBusinessFilter(event.target.value)}>
+                <option value="all">Todos los negocios</option>
+                {businessOptions.map((item) => <option key={item.key} value={item.key}>{item.name}</option>)}
+              </select>
+            </div>
+          </label>
+          <label>
+            <span>FECHA</span>
+            <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value)}>
+              <option value="all">Todas</option>
+              <option value="today">Hoy</option>
+              <option value="7d">Próximos 7 días</option>
+              <option value="30d">Próximos 30 días</option>
+            </select>
+          </label>
+          <label>
+            <span>PRIORIDAD</span>
+            <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
+              <option value="all">Todas</option>
+              <option value="1">Alta</option>
+              <option value="2">Media</option>
+              <option value="3">Baja</option>
+            </select>
+          </label>
+          <div className="gt-view-toggle">
+            <span>VISTA</span>
+            <div>
+              <button className={viewMode === "list" ? "on" : ""} onClick={() => setViewMode("list")}>Lista</button>
+              <button className={viewMode === "kanban" ? "on" : ""} onClick={() => { setViewMode("kanban"); setFilter("all"); }}>Kanban</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="gt-business-legend">
+          {businessOptions.map((item) => (
+            <button key={item.key} className={businessFilter === item.key ? "on" : ""} onClick={() => setBusinessFilter(businessFilter === item.key ? "all" : item.key)}>
+              <i style={{ background: item.color }} />{item.name}
+            </button>
+          ))}
+        </div>
+
         {error ? <div className="gt-error">{error}</div> : null}
 
-        <section className="gt-list">
+        <section className={"gt-list " + (viewMode === "kanban" ? "kanban-mode" : "")}>
           {!data ? <div className="gt-empty">Cargando gestos…</div> : null}
-          {filter === "agenda" ? (
-            <AgendaList events={data?.agenda || []} />
+          {viewMode === "kanban" ? (
+            <KanbanBoard tasks={filteredTasks} events={filteredAgenda} />
+          ) : filter === "agenda" ? (
+            <AgendaList events={filteredAgenda} />
           ) : (
             <>
               {data && !visible.length ? (
                 <div className="gt-empty">
                   <span>✓</span>
                   <b>{filter === "done" ? "Todavía no hay gestos completados." : filter === "scheduled" ? "No hay gestos programados." : "No hay gestos pendientes en esta vista."}</b>
-                  <p>Cuando LINK WORLD emita o programe un gesto, aparecerá aquí.</p>
+                  <p>Prueba cambiar negocio, fecha o prioridad.</p>
                 </div>
               ) : null}
               {visible.map((task) => (
@@ -245,7 +345,7 @@ function GestureRow({
   const done = task.status === "done";
 
   return (
-    <article className={"gt-row" + (done ? " done" : "")}>
+    <article className={"gt-row" + (done ? " done" : "")} style={{ borderLeftColor: task.business_color || "#d7d4cc" }}>
       <button
         className="gt-check"
         disabled={busy}
@@ -259,7 +359,7 @@ function GestureRow({
         <b>{task.title}</b>
         <span>
           {task.task_kind === "financial_closure" ? "CIERRE FINANCIERO" : task.task_kind === "financial_transaction" ? "FINANZAS" : task.source_domain === "world" ? "LINK WORLD" : "CONTROL CENTRAL"}
-          {task.entity_name ? " · " + task.entity_name : ""}
+          {task.business_name ? " · " + task.business_name : ""}{task.entity_name && task.entity_name !== task.business_name ? " · " + task.entity_name : ""}
         </span>
         {task.objective ? <em>{task.objective}</em> : null}
       </button>
