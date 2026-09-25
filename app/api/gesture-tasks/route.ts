@@ -20,6 +20,91 @@ function titleFromEvent(eventType: string) {
   return map[eventType] || eventType.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function taskGuidance(task: Record<string, any>, entity?: Record<string, any> | null) {
+  if (task.context_summary && task.objective && task.resolution_criteria && task.recommended_action) {
+    return {
+      context_summary: task.context_summary,
+      objective: task.objective,
+      resolution_criteria: task.resolution_criteria,
+      recommended_action: task.recommended_action,
+    };
+  }
+
+  const name = entity?.name || task.entity_name || "esta entidad";
+  const eventType = String(task.origin_event_type || "");
+  const kind = String(task.task_kind || "general");
+
+  if (kind === "financial_transaction") {
+    const state = String(task.financial_state || "open");
+    const needsDocument = Boolean(task.requires_document);
+    return {
+      context_summary: `LINK WORLD detectó un movimiento financiero asociado a ${name}. Estado actual: ${state.replace(/_/g, " ")}${needsDocument ? "; falta respaldo documental." : "."}`,
+      objective: "Cerrar el movimiento financiero con pago y respaldo correctamente vinculados al negocio.",
+      resolution_criteria: needsDocument
+        ? "El pago debe quedar registrado y el comprobante, boleta o factura correspondiente debe estar guardado en Drive e indexado en Supabase."
+        : "La transacción debe quedar conciliada y en estado cerrado, sin pendientes documentales.",
+      recommended_action: needsDocument
+        ? "Adjuntar o localizar el respaldo de la transacción y vincularlo al movimiento."
+        : "Revisar el estado de pago y marcar la transacción como conciliada cuando corresponda.",
+    };
+  }
+
+  if (kind === "financial_closure") {
+    return {
+      context_summary: `Existe un cierre financiero abierto para ${name}. El cierre agrupa los movimientos del período y sus respaldos.`,
+      objective: "Dejar el período financiero completamente conciliado y documentado.",
+      resolution_criteria: "Todas las transacciones del período deben estar cerradas, con sus documentos requeridos, y el respaldo de cierre debe quedar registrado.",
+      recommended_action: "Revisar transacciones pendientes, documentos faltantes y cerrar el período cuando todo esté conciliado.",
+    };
+  }
+
+  if (eventType === "counterparty.registered" || task.entity_type === "counterparty") {
+    const businessName = entity?.business_name ? ` dentro de ${entity.business_name}` : "";
+    const relation = entity?.relationship_state || "sin definir";
+    const agreement = entity?.agreement_status || "sin definir";
+    return {
+      context_summary: `${name} fue registrada por LINK WORLD como contraparte${businessName}. Relación: ${relation}. Acuerdo comercial: ${agreement}.`,
+      objective: "Convertir la contraparte detectada en una relación comercial claramente definida y operable.",
+      resolution_criteria: "Debe quedar definido el estado de la relación, el estado del acuerdo y un siguiente paso concreto: operar, negociar, esperar o descartar.",
+      recommended_action: "Revisar la ficha de la contraparte, validar las condiciones comerciales y registrar la decisión o siguiente acción.",
+    };
+  }
+
+  if (eventType === "product.created" || task.entity_type === "product") {
+    const stage = entity?.stage || "sin etapa";
+    const economic = entity?.economic_state || "sin estado económico";
+    const missing: string[] = [];
+    if (entity?.public_price == null) missing.push("precio público");
+    if (entity?.acquisition_price == null) missing.push("costo de adquisición");
+    if (entity?.link_share_percent == null) missing.push("participación LINK");
+    return {
+      context_summary: `${name} existe en LINK WORLD. Etapa: ${stage}. Estado económico: ${economic}.${missing.length ? " Faltan: " + missing.join(", ") + "." : ""}`,
+      objective: "Dejar el producto listo para avanzar comercialmente sin datos económicos o de operación críticos pendientes.",
+      resolution_criteria: "La etapa, condiciones económicas, responsables y relación con cliente/negocio deben quedar suficientemente definidos para ejecutar el siguiente gesto.",
+      recommended_action: missing.length
+        ? "Completar " + missing.join(", ") + " y validar la etapa del producto."
+        : "Validar la etapa actual y definir el siguiente gesto comercial.",
+    };
+  }
+
+  if (task.entity_type === "business" || eventType.startsWith("business.")) {
+    const verification = entity?.verification_status || "sin verificar";
+    return {
+      context_summary: `${name} tuvo un movimiento en LINK WORLD. Estado de verificación: ${verification}.`,
+      objective: "Mantener el negocio con identidad, estado y próximos pasos operativos claramente definidos.",
+      resolution_criteria: "El negocio debe quedar verificado o con una razón explícita para permanecer pendiente, y con el siguiente paso registrado.",
+      recommended_action: "Revisar los cambios del negocio y confirmar si requiere validación, datos adicionales o una acción operativa.",
+    };
+  }
+
+  return {
+    context_summary: task.note || "LINK WORLD generó un gesto que requiere revisión humana.",
+    objective: "Resolver el gesto y devolver un estado claro al ecosistema.",
+    resolution_criteria: "Debe existir una decisión o resultado verificable y el gesto debe quedar actualizado en LINK WORLD.",
+    recommended_action: "Abrir el contexto asociado, tomar la decisión necesaria y registrar el resultado.",
+  };
+}
+
 async function emitGesture(
   supabase: NonNullable<ReturnType<typeof getCentralSupabase>>,
   input: {
@@ -139,23 +224,49 @@ export async function GET() {
         .order("priority", { ascending: true })
         .order("due_at", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false }),
-      supabase.from("link_world_businesses").select("id,name,global_id"),
-      supabase.from("link_world_clients").select("id,name,global_id,business_id"),
-      supabase.from("link_world_products").select("id,name,global_id,business_id,client_id"),
+      supabase.from("link_world_businesses").select("id,name,global_id,verification_status,summary"),
+      supabase.from("link_world_clients").select("id,name,global_id,business_id,role,relationship_state,agreement_status,summary,owned_facts"),
+      supabase.from("link_world_products").select("id,name,global_id,business_id,client_id,stage,economic_state,public_price,acquisition_price,link_share_percent"),
     ]);
 
     const firstError = [tasksResult.error, businessesResult.error, clientsResult.error, productsResult.error].find(Boolean);
     if (firstError) return NextResponse.json({ ok: false, error: firstError.message }, { status: 500 });
 
     const entityNames = new Map<string, string>();
-    for (const row of businessesResult.data || []) if (row.global_id) entityNames.set(row.global_id, row.name);
-    for (const row of clientsResult.data || []) if (row.global_id) entityNames.set(row.global_id, row.name);
-    for (const row of productsResult.data || []) if (row.global_id) entityNames.set(row.global_id, row.name);
+    const entityContext = new Map<string, Record<string, any>>();
 
-    const tasks = (tasksResult.data || []).map((task) => ({
-      ...task,
-      entity_name: task.global_id ? entityNames.get(task.global_id) || null : null,
-    }));
+    for (const row of businessesResult.data || []) {
+      if (!row.global_id) continue;
+      entityNames.set(row.global_id, row.name);
+      entityContext.set(row.global_id, row);
+    }
+
+    const businessById = new Map((businessesResult.data || []).map((row) => [row.id, row]));
+
+    for (const row of clientsResult.data || []) {
+      if (!row.global_id) continue;
+      const business = row.business_id ? businessById.get(row.business_id) : null;
+      const enriched = { ...row, business_name: business?.name || null };
+      entityNames.set(row.global_id, row.name);
+      entityContext.set(row.global_id, enriched);
+    }
+
+    for (const row of productsResult.data || []) {
+      if (!row.global_id) continue;
+      entityNames.set(row.global_id, row.name);
+      entityContext.set(row.global_id, row);
+    }
+
+    const tasks = (tasksResult.data || []).map((task) => {
+      const entity = task.global_id ? entityContext.get(task.global_id) || null : null;
+      const entityName = task.global_id ? entityNames.get(task.global_id) || null : null;
+      const guidance = taskGuidance({ ...task, entity_name: entityName }, entity);
+      return {
+        ...task,
+        ...guidance,
+        entity_name: entityName,
+      };
+    });
 
     return NextResponse.json({
       ok: true,
