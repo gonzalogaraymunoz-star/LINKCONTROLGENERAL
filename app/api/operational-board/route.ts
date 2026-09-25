@@ -89,7 +89,25 @@ async function emitGesture(
   const code = gestureCode();
   const now = new Date().toISOString();
   const correlationId = crypto.randomUUID();
-  const payload = input.payload || {};
+
+  let validParentGestureCode: string | null = null;
+  if (input.parentGestureCode) {
+    const { data: parentCommand, error: parentLookupError } = await supabase
+      .from("command_bus")
+      .select("gesture_code")
+      .eq("gesture_code", input.parentGestureCode)
+      .maybeSingle();
+
+    if (parentLookupError) throw parentLookupError;
+    validParentGestureCode = parentCommand?.gesture_code || null;
+  }
+
+  const payload = {
+    ...(input.payload || {}),
+    ...(input.parentGestureCode && !validParentGestureCode
+      ? { source_parent_gesture_code: input.parentGestureCode }
+      : {}),
+  };
 
   const { error: commandError } = await supabase.from("command_bus").insert({
     control_id: ROOT_CONTROL_ID,
@@ -102,11 +120,14 @@ async function emitGesture(
     payload,
     idempotency_key: "board:" + code,
     status: "succeeded",
-    result: { applied: true },
+    result: {
+      applied: true,
+      lineage_mode: validParentGestureCode ? "command_parent" : input.parentGestureCode ? "source_reference" : "root",
+    },
     processed_at: now,
     gesture_code: code,
     source_domain: "control",
-    parent_gesture_code: input.parentGestureCode || null,
+    parent_gesture_code: validParentGestureCode,
     correlation_id: correlationId,
     requires_approval: false,
     approval_status: "not_required",
