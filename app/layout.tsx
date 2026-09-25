@@ -8,6 +8,9 @@ import "./actions.css";
 import "./control-v5.css";
 import "./control-v6.css";
 import "./control-v7.css";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
+import "./link-world-dashboard.css";
 
 export const metadata: Metadata = {
   title: "LINK CONTROL CENTRAL",
