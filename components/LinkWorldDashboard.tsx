@@ -819,60 +819,159 @@ function PersonalStrip({ mission, editing }: { mission: PersonalMission; editing
 }
 
 function ClientDrawer({ client, close }: { client: Client; close: () => void }) {
-  const facts = client.owned_facts && typeof client.owned_facts === "object" ? Object.entries(client.owned_facts) : [];
+  const facts = asRecord(client.owned_facts);
+  const profile = asRecord(facts.profile);
+  const economy = asRecord(facts.economic_contract);
+  const drive = asRecord(facts.drive_backend);
+
+  const displayName = textValue(profile.display_name) || client.name;
+  const responsible = textValue(profile.responsible) || textValue(facts.responsible_name) || "Por definir";
+  const location = [client.city, client.country].filter(Boolean).join(", ") || textValue(facts.operating_location) || "—";
+  const driveUrl = textValue(drive.client_folder_url) || textValue(drive.business_folder_url) || textValue(drive.folder_url);
+  const backupActive = String(drive.status || "").toLowerCase() === "active" || Boolean(driveUrl);
+  const agreementOpen = ["", "none", "pending", "draft", "unknown"].includes(String(client.agreement_status || "").toLowerCase());
+  const relationEarly = ["", "detected"].includes(String(client.relationship_state || "").toLowerCase());
+  const proposedProduct = client.products.find((product) => String(product.economic_state || product.stage || "").toLowerCase() === "proposal");
+
+  const nextStep = !backupActive
+    ? "Crear respaldo financiero"
+    : agreementOpen
+      ? "Definir acuerdo comercial"
+      : relationEarly
+        ? "Avanzar la relación"
+        : proposedProduct
+          ? "Cerrar economía de " + proposedProduct.name
+          : "Sin bloqueo crítico";
+
+  const distribution = textValue(economy.distribution_mode) === "manual_by_product"
+    ? "Manual por producto"
+    : stateText(textValue(economy.distribution_mode));
+  const calculationBase = textValue(economy.calculation_base) === "public_reference_price"
+    ? "Precio público de referencia"
+    : stateText(textValue(economy.calculation_base));
+  const benefitModes = Array.isArray(economy.customer_benefit_modes)
+    ? economy.customer_benefit_modes.map((item) => textValue(item)).filter(Boolean)
+    : [];
+  const benefitLabel = benefitModes.length
+    ? benefitModes.map((item) => item === "immediate_discount" ? "Descuento" : item === "future_credit" ? "Crédito" : stateText(item)).join(" / ")
+    : "Por definir";
+  const hasEconomy = Boolean(Object.keys(economy).length);
+
   return (
     <div className="lw-drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
       <aside className="lw-drawer">
         <header>
           <div>
             <small>CLIENTE · LINK WORLD</small>
-            <h2>{client.name}</h2>
+            <h2>{displayName}</h2>
             <p>{client.summary || "Sin resumen registrado."}</p>
           </div>
           <button onClick={close} aria-label="Cerrar">×</button>
         </header>
 
-        <section className="lw-drawer-grid">
-          <Detail label="Negocio" value={client.business?.name || "—"} />
-          <Detail label="Rol" value={humanize(client.role)} />
-          <Detail label="Relación" value={humanize(client.relationship_state)} />
-          <Detail label="Acuerdo" value={humanize(client.agreement_status)} />
-          <Detail label="Ubicación" value={[client.city, client.country].filter(Boolean).join(", ") || "—"} />
-          <Detail label="Actualizado" value={formatDateTime(client.updated_at)} />
+        <section className="lw-client-statusbar" aria-label="Estado del cliente">
+          <div><small>RELACIÓN</small><b>{stateText(client.relationship_state)}</b></div>
+          <div><small>ACUERDO</small><b>{stateText(client.agreement_status)}</b></div>
+          <div className={backupActive ? "good" : "pending"}><small>RESPALDO</small><b>{backupActive ? "Activo" : "Pendiente"}</b></div>
         </section>
 
-        {client.website ? <a className="lw-client-link" href={client.website} target="_blank" rel="noreferrer">Abrir website ↗</a> : null}
+        <section className="lw-drawer-grid compact">
+          <Detail label="Negocio" value={client.business?.name || "—"} />
+          <Detail label="Responsable" value={responsible} />
+          <Detail label="Ubicación" value={location} />
+          <Detail label="Rol" value={stateText(client.role)} />
+        </section>
+
+        <section className="lw-client-next">
+          <small>SIGUIENTE PASO</small>
+          <b>{nextStep}</b>
+        </section>
+
+        <section className={"lw-backup-card " + (backupActive ? "active" : "pending")}>
+          <div>
+            <small>BACKEND FINANCIERO</small>
+            <b>{backupActive ? "Respaldo conectado" : "Respaldo pendiente"}</b>
+            <p>{backupActive ? "La carpeta financiera de este cliente está registrada en LINK WORLD." : "Este cliente todavía necesita su carpeta financiera obligatoria."}</p>
+          </div>
+          {driveUrl
+            ? <a href={driveUrl} target="_blank" rel="noreferrer">Abrir carpeta ↗</a>
+            : <span>Obligatorio</span>}
+        </section>
 
         <section className="lw-drawer-section">
           <div className="lw-section-head"><small>PRODUCTOS</small><span>{client.products.length}</span></div>
           {client.products.length ? client.products.map((product) => (
             <article className="lw-drawer-product" key={product.id}>
-              <div><b>{product.name}</b><small>{product.category || "Sin categoría"} · {humanize(product.economic_state || product.stage)}</small></div>
+              <div><b>{product.name}</b><small>{product.category || "Sin categoría"} · {stateText(product.economic_state || product.stage)}</small></div>
               <div>
                 {product.public_price !== null && product.public_price !== undefined ? <strong>{money(product.public_price, product.currency)}</strong> : <span>Sin precio</span>}
-                {product.link_share_percent !== null && product.link_share_percent !== undefined ? <small>LINK {product.link_share_percent}%</small> : null}
               </div>
             </article>
           )) : <Empty text="Este cliente todavía no tiene productos." />}
         </section>
 
-        {facts.length ? (
+        {hasEconomy ? (
           <section className="lw-drawer-section">
-            <div className="lw-section-head"><small>DATOS PROPIOS</small><span>{facts.length}</span></div>
-            <div className="lw-facts">
-              {facts.map(([key, value]) => <Detail key={key} label={humanize(key)} value={formatFact(value)} />)}
+            <div className="lw-section-head"><small>ECONOMÍA</small></div>
+            <div className="lw-economy-brief">
+              <div><small>Distribución</small><b>{distribution || "Por definir"}</b></div>
+              <div><small>Base</small><b>{calculationBase || "Por definir"}</b></div>
+              <div><small>Beneficio cliente</small><b>{benefitLabel}</b></div>
             </div>
           </section>
         ) : null}
 
-        <section className="lw-drawer-section lw-identifiers">
-          <div className="lw-section-head"><small>IDENTIDAD</small></div>
-          <Detail label="Global ID" value={client.global_id || "—"} />
-          <Detail label="UUID" value={client.id} />
-        </section>
+        {client.website ? <a className="lw-client-link" href={client.website} target="_blank" rel="noreferrer">Abrir website ↗</a> : null}
+
+        <details className="lw-tech-details">
+          <summary>Datos técnicos</summary>
+          <div className="lw-tech-grid">
+            <Detail label="Global ID" value={client.global_id || "—"} />
+            <Detail label="UUID" value={client.id} />
+            <Detail label="Actualizado" value={formatDateTime(client.updated_at)} />
+            <Detail label="Datos propios" value={String(Object.keys(facts).length) + " registros"} />
+          </div>
+        </details>
       </aside>
     </div>
   );
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function textValue(value: unknown): string {
+  return typeof value === "string" ? value : value === null || value === undefined ? "" : String(value);
+}
+
+function stateText(value?: string | null) {
+  if (!value) return "—";
+  const key = value.toLowerCase();
+  const labels: Record<string, string> = {
+    detected: "Detectado",
+    conversation: "En conversación",
+    agreed: "Acordado",
+    active: "Activo",
+    recorded: "Registrado",
+    learning: "Aprendiendo",
+    expanding: "Expandiendo",
+    paused: "Pausado",
+    closed: "Cerrado",
+    none: "Sin acuerdo",
+    pending: "Pendiente",
+    draft: "Borrador",
+    negotiation: "En negociación",
+    proposal: "Propuesta",
+    ready: "Listo",
+    blocked: "Bloqueado",
+    comercio: "Comercio",
+    proveedor: "Proveedor",
+    establecimiento: "Establecimiento",
+    partner: "Partner",
+    otro: "Otro",
+  };
+  return labels[key] || humanize(value);
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
