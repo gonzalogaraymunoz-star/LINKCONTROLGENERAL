@@ -202,7 +202,7 @@ export default function GestureTaskApp() {
         <div className="gt-nav-foot">GESTOS ↔ LINK WORLD</div>
       </aside>
 
-      <section className="gt-main">
+      <section className={"gt-main" + (viewMode === "kanban" ? " wide" : "")}>
         <header className="gt-head">
           <div>
             <small>OPERACIÓN</small>
@@ -302,7 +302,7 @@ export default function GestureTaskApp() {
         <section className={"gt-list " + (viewMode === "kanban" ? "kanban-mode" : "")}>
           {!data ? <div className="gt-empty">Cargando gestos…</div> : null}
           {viewMode === "kanban" ? (
-            <KanbanBoard tasks={filteredTasks} events={filteredAgenda} />
+            <KanbanBoard tasks={filteredTasks} events={filteredAgenda} act={act} busy={busy} />
           ) : filter === "agenda" ? (
             <AgendaList events={filteredAgenda} />
           ) : (
@@ -487,70 +487,150 @@ function AgendaList({ events }: { events: AgendaEvent[] }) {
   );
 }
 
-function KanbanBoard({ tasks, events }: { tasks: GestureTask[]; events: AgendaEvent[] }) {
-  const pending = tasks.filter((task) => task.status !== "done" && !task.due_at);
-  const scheduled = tasks.filter((task) => task.status !== "done" && Boolean(task.due_at));
-  const done = tasks.filter((task) => task.status === "done");
+function KanbanBoard({
+  tasks,
+  events,
+  act,
+  busy,
+}: {
+  tasks: GestureTask[];
+  events: AgendaEvent[];
+  act: (action: string, id: string, payload?: Record<string, unknown>) => Promise<void>;
+  busy: string | null;
+}) {
+  const open = tasks.filter((task) => task.status !== "done");
+  const inbox = open.filter((task) => !task.due_at);
+  const today = open.filter((task) => task.due_at && isTodayOrOverdue(task.due_at));
+  const next = open.filter((task) => task.due_at && !isTodayOrOverdue(task.due_at));
+  const done = tasks.filter((task) => task.status === "done").slice(0, 12);
+  const upcomingEvents = events.slice(0, 8);
 
   return (
-    <div className="gt-kanban">
-      <KanbanColumn title="Pendientes" count={pending.length}>
-        {pending.map((task) => <TaskCard key={task.id} task={task} />)}
-      </KanbanColumn>
-      <KanbanColumn title="Programados" count={scheduled.length}>
-        {scheduled.map((task) => <TaskCard key={task.id} task={task} />)}
-      </KanbanColumn>
-      <KanbanColumn title="Agenda" count={events.length}>
-        {events.map((event) => <AgendaCard key={event.id} event={event} />)}
-      </KanbanColumn>
-      <KanbanColumn title="Resueltos" count={done.length}>
-        {done.map((task) => <TaskCard key={task.id} task={task} />)}
-      </KanbanColumn>
+    <div className="gt-board-shell">
+      <div className="gt-board-head">
+        <div>
+          <small>TABLERO DE TRABAJO</small>
+          <b>{open.length} gestos activos</b>
+        </div>
+        <div className="gt-board-stats">
+          <span><strong>{inbox.length}</strong> sin fecha</span>
+          <span><strong>{today.length}</strong> hoy / vencidos</span>
+          <span><strong>{next.length}</strong> programados</span>
+        </div>
+      </div>
+
+      {upcomingEvents.length ? (
+        <section className="gt-calendar-context">
+          <header>
+            <div><small>GOOGLE CALENDAR</small><b>Próximos eventos</b></div>
+            <span>{events.length} en agenda</span>
+          </header>
+          <div>
+            {upcomingEvents.map((event) => (
+              <a key={event.id} href={event.event_url || "#"} target={event.event_url ? "_blank" : undefined} rel="noreferrer" style={{ borderTopColor: event.business_color || "#d7d4cc" }}>
+                <time>{new Date(event.starts_at).toLocaleDateString("es-CL", { day: "numeric", month: "short" })}<b>{new Date(event.starts_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</b></time>
+                <div><strong>{event.title}</strong><span><i style={{ background: event.business_color || "#d7d4cc" }} />{event.business_name || event.calendar_name || "Sin negocio"}</span></div>
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="gt-kanban">
+        <KanbanColumn title="Por resolver" count={inbox.length} hint="Gestos sin fecha">
+          {inbox.length ? inbox.map((task) => (
+            <TaskCard key={task.id} task={task} busy={busy === task.id} act={act} />
+          )) : <KanbanEmpty text="Nada esperando decisión." />}
+        </KanbanColumn>
+
+        <KanbanColumn title="Hoy" count={today.length} hint="Hoy y vencidos">
+          {today.length ? today.map((task) => (
+            <TaskCard key={task.id} task={task} busy={busy === task.id} act={act} />
+          )) : <KanbanEmpty text="Nada urgente para hoy." />}
+        </KanbanColumn>
+
+        <KanbanColumn title="Programados" count={next.length} hint="Próximas acciones">
+          {next.length ? next.map((task) => (
+            <TaskCard key={task.id} task={task} busy={busy === task.id} act={act} />
+          )) : <KanbanEmpty text="No hay gestos programados." />}
+        </KanbanColumn>
+
+        <KanbanColumn title="Resueltos" count={tasks.filter((task) => task.status === "done").length} hint="Últimos 12">
+          {done.length ? done.map((task) => (
+            <TaskCard key={task.id} task={task} busy={busy === task.id} act={act} />
+          )) : <KanbanEmpty text="Todavía no hay cierres." />}
+        </KanbanColumn>
+      </div>
     </div>
   );
 }
 
-function KanbanColumn({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+function KanbanColumn({
+  title,
+  count,
+  hint,
+  children,
+}: {
+  title: string;
+  count: number;
+  hint: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="gt-kanban-column">
-      <header><b>{title}</b><span>{count}</span></header>
+      <header>
+        <div><b>{title}</b><small>{hint}</small></div>
+        <span>{count}</span>
+      </header>
       <div>{children}</div>
     </section>
   );
 }
 
-function TaskCard({ task }: { task: GestureTask }) {
+function TaskCard({
+  task,
+  busy,
+  act,
+}: {
+  task: GestureTask;
+  busy: boolean;
+  act: (action: string, id: string, payload?: Record<string, unknown>) => Promise<void>;
+}) {
+  const done = task.status === "done";
   return (
-    <article className="gt-kanban-card" style={{ borderTopColor: task.business_color || "#d7d4cc" }}>
+    <article className={"gt-kanban-card" + (done ? " done" : "")} style={{ borderTopColor: task.business_color || "#d7d4cc" }}>
       <div className="gt-card-meta">
         <span><i style={{ background: task.business_color || "#d7d4cc" }} />{task.business_name || "Sin negocio"}</span>
-        <em>{priorityLabel(task.priority)}</em>
+        <em className={"p" + task.priority}>{priorityLabel(task.priority)}</em>
       </div>
       <b>{task.title}</b>
       {task.objective ? <p>{task.objective}</p> : null}
-      <footer>
-        <span>{task.due_at ? formatDueTime(task.due_at) : "Sin fecha"}</span>
-        <span>{task.task_kind === "financial_transaction" || task.task_kind === "financial_closure" ? "Finanzas" : task.source_domain === "world" ? "LINK WORLD" : "Control"}</span>
-      </footer>
+      <div className="gt-card-time">
+        {task.due_at ? <>◷ {formatDueTime(task.due_at)}</> : "Sin fecha"}
+      </div>
+      <div className="gt-card-actions">
+        {done ? (
+          <button disabled={busy} onClick={() => act("reopen", task.id)}>Reabrir</button>
+        ) : (
+          <>
+            <button className="primary" disabled={busy} onClick={() => act("complete", task.id)}>Resolver</button>
+            {!task.due_at ? <button disabled={busy} onClick={() => act("schedule", task.id, { dueAt: tomorrowAtNine() })}>Mañana</button> : null}
+          </>
+        )}
+      </div>
     </article>
   );
 }
 
-function AgendaCard({ event }: { event: AgendaEvent }) {
-  return (
-    <a className="gt-kanban-card gt-calendar-card" href={event.event_url || "#"} target={event.event_url ? "_blank" : undefined} rel="noreferrer" style={{ borderTopColor: event.business_color || "#d7d4cc" }}>
-      <div className="gt-card-meta">
-        <span><i style={{ background: event.business_color || "#d7d4cc" }} />{event.business_name || event.calendar_name || "Sin negocio"}</span>
-        <em>{priorityLabel(event.priority || 3)}</em>
-      </div>
-      <b>{event.title}</b>
-      {event.description ? <p>{event.description.slice(0, 120)}{event.description.length > 120 ? "…" : ""}</p> : null}
-      <footer>
-        <span>{formatDueTime(event.starts_at)}</span>
-        <span>{event.event_kind === "gesture" ? "Gesto" : event.event_kind === "financial" ? "Finanzas" : "Calendar"}</span>
-      </footer>
-    </a>
-  );
+function KanbanEmpty({ text }: { text: string }) {
+  return <div className="gt-kanban-empty">{text}</div>;
+}
+
+function isTodayOrOverdue(value: string) {
+  const date = new Date(value);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  return date <= end;
 }
 
 function matchesDateFilter(value: string | null | undefined, filter: string) {
@@ -607,23 +687,29 @@ const css = `
 .gt-row{border-left:3px solid transparent;padding-left:8px}
 .gt-agenda>a{border-left:3px solid transparent;padding-left:9px}
 .gt-agenda span{display:flex!important;align-items:center;gap:5px}.gt-priority-tag{font-style:normal;border-left:1px solid #ddd;padding-left:6px;color:#999!important;font-size:8px!important}
-.gt-list.kanban-mode{margin-top:14px;overflow-x:auto;padding-bottom:10px}
-.gt-kanban{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:10px;min-width:920px;align-items:start}
-.gt-kanban-column{background:var(--link-surface-2,#efefeb);border:1px solid var(--link-line,#ddd);border-radius:13px;padding:8px;min-height:200px}
-.gt-kanban-column>header{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 9px}.gt-kanban-column>header b{font-size:10px}.gt-kanban-column>header span{font-size:8px;color:#888;background:var(--link-surface,#fff);border-radius:999px;padding:3px 6px}
+.gt-list.kanban-mode{margin-top:12px;overflow:visible}
+.gt-board-shell{display:grid;gap:12px}
+.gt-board-head{display:flex;align-items:end;justify-content:space-between;gap:20px;padding:4px 2px 2px}.gt-board-head small{display:block;font-size:7px;letter-spacing:.14em;color:#999;margin-bottom:4px}.gt-board-head b{font-size:14px}
+.gt-board-stats{display:flex;gap:16px}.gt-board-stats span{font-size:8px;color:#888;white-space:nowrap}.gt-board-stats strong{font-size:13px;color:#222;margin-right:3px}
+.gt-calendar-context{border:1px solid var(--link-line,#ddd);border-radius:13px;background:var(--link-surface,#fff);padding:9px 10px}.gt-calendar-context>header{display:flex;justify-content:space-between;align-items:end;padding:1px 2px 8px}.gt-calendar-context>header small{display:block;font-size:7px;letter-spacing:.12em;color:#999}.gt-calendar-context>header b{font-size:10px}.gt-calendar-context>header>span{font-size:8px;color:#888}.gt-calendar-context>div{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.gt-calendar-context>div::-webkit-scrollbar{display:none}.gt-calendar-context a{flex:0 0 200px;display:grid;grid-template-columns:58px 1fr;gap:8px;border:1px solid #e7e7e2;border-top:3px solid #d7d4cc;border-radius:9px;padding:8px;color:inherit;text-decoration:none;background:#fafaf8}.gt-calendar-context time{font-size:7px;color:#888;text-transform:capitalize}.gt-calendar-context time b{display:block;font-size:9px;color:#333;margin-top:3px}.gt-calendar-context strong{display:block;font-size:9px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-calendar-context span{display:flex;align-items:center;gap:5px;font-size:7px;color:#888;margin-top:4px}.gt-calendar-context span i{width:6px;height:6px;border-radius:50%}
+.gt-kanban{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:start}
+.gt-kanban-column{background:var(--link-surface-2,#efefeb);border:1px solid var(--link-line,#ddd);border-radius:13px;padding:8px;min-height:280px}
+.gt-kanban-column>header{display:flex;align-items:flex-start;justify-content:space-between;padding:4px 4px 9px}.gt-kanban-column>header>div b{display:block;font-size:10px}.gt-kanban-column>header small{display:block;font-size:7px;color:#999;margin-top:2px;font-weight:400}.gt-kanban-column>header>span{font-size:8px;color:#888;background:var(--link-surface,#fff);border-radius:999px;padding:3px 6px}
 .gt-kanban-column>div{display:grid;gap:7px}
-.gt-kanban-card{display:block;border:1px solid #dfdfda;border-top:3px solid #d7d4cc;border-radius:10px;background:var(--link-surface,#fff);padding:10px;color:inherit;text-decoration:none;box-shadow:0 1px 1px rgba(0,0,0,.02)}
-.gt-kanban-card>b{display:block;font-size:11px;line-height:1.35;margin:6px 0}.gt-kanban-card p{margin:0;font-size:8.5px;line-height:1.4;color:#74746f;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.gt-kanban-card footer{display:flex;justify-content:space-between;gap:8px;margin-top:9px;padding-top:7px;border-top:1px solid #ecece7;font-size:7.5px;color:#91918b}
-.gt-card-meta{display:flex;align-items:center;justify-content:space-between;gap:8px}.gt-card-meta span{display:flex;align-items:center;gap:5px;font-size:7.5px;color:#777;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-card-meta em{font-style:normal;font-size:7px;text-transform:uppercase;letter-spacing:.06em;color:#888}
-.gt-calendar-card:hover{transform:translateY(-1px)}
-@media(max-width:760px){.gt-filterbar{grid-template-columns:1fr 1fr}.gt-view-toggle>div{width:100%}.gt-view-toggle button{flex:1}.gt-kanban{grid-template-columns:repeat(4,minmax(250px,1fr));min-width:1040px}}
+.gt-kanban-card{display:block;border:1px solid #dfdfda;border-top:3px solid #d7d4cc;border-radius:10px;background:var(--link-surface,#fff);padding:10px;color:inherit;box-shadow:0 1px 1px rgba(0,0,0,.02)}.gt-kanban-card.done{opacity:.62}
+.gt-kanban-card>b{display:block;font-size:10.5px;line-height:1.35;margin:7px 0 5px}.gt-kanban-card p{margin:0;font-size:8px;line-height:1.4;color:#74746f;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.gt-card-meta{display:flex;align-items:center;justify-content:space-between;gap:8px}.gt-card-meta span{display:flex;align-items:center;gap:5px;font-size:7.5px;color:#777;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-card-meta em{font-style:normal;font-size:6.5px;text-transform:uppercase;letter-spacing:.06em;padding:2px 5px;border-radius:999px;background:#eee;color:#777}.gt-card-meta em.p1{background:#f1e3df;color:#8c5146}.gt-card-meta em.p2{background:#f2eadb;color:#8c6d35}.gt-card-meta em.p3{background:#e9ece8;color:#617064}
+.gt-card-time{margin-top:8px;font-size:7.5px;color:#888}
+.gt-card-actions{display:flex;gap:5px;margin-top:8px;padding-top:7px;border-top:1px solid #ecece7}.gt-card-actions button{border:1px solid #deded9;background:#fff;color:#555;border-radius:7px;padding:5px 7px;font-size:7.5px;cursor:pointer}.gt-card-actions button.primary{background:#20201e;color:#fff;border-color:#20201e}.gt-card-actions button:disabled{opacity:.45}
+.gt-kanban-empty{border:1px dashed #d8d8d2;border-radius:10px;padding:18px 10px;text-align:center;color:#999;font-size:8px;background:rgba(255,255,255,.35)}
+@media(max-width:1050px){.gt-main.wide{width:calc(100vw - 240px)}.gt-kanban{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.gt-filterbar{grid-template-columns:1fr 1fr}.gt-view-toggle>div{width:100%}.gt-view-toggle button{flex:1}.gt-main.wide{width:100%}.gt-kanban{grid-template-columns:1fr}.gt-board-head{display:block}.gt-board-stats{margin-top:8px;overflow:auto}.gt-calendar-context a{flex-basis:180px}}
 .gt-page{min-height:100vh;background:var(--link-bg,#f5f5f2);color:var(--link-text,#1e1e1c);display:grid;grid-template-columns:220px 1fr;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif}
 .gt-nav{position:sticky;top:0;height:100vh;border-right:1px solid var(--link-line,#deded8);background:var(--link-surface,#f9f9f7);padding:22px 12px;display:flex;flex-direction:column}
 .gt-logo{display:flex;align-items:center;gap:10px;padding:2px 7px 28px}.gt-logo>span{width:25px;height:25px;border:1px solid currentColor;border-radius:50%}.gt-logo b{display:block;font-size:10px;letter-spacing:.2em;line-height:1.35}
 .gt-nav nav{display:grid;gap:5px}.gt-nav nav a{padding:11px 13px;border-radius:12px;color:var(--link-muted,#686865);text-decoration:none;font-size:12px}.gt-nav nav a.active{background:var(--link-surface-2,#e9e9e5);color:var(--link-text,#1e1e1c);font-weight:650}
 .gt-nav-foot{margin-top:auto;padding:12px 7px;font-size:8px;letter-spacing:.15em;color:var(--link-faint,#999)}
-.gt-main{width:min(860px,calc(100vw - 260px));margin:0 auto;padding:54px 20px 70px}
+.gt-main{width:min(900px,calc(100vw - 260px));margin:0 auto;padding:54px 20px 70px;transition:width .18s ease}.gt-main.wide{width:min(1480px,calc(100vw - 250px))}
 .gt-head{display:flex;justify-content:space-between;align-items:end;gap:20px;padding-bottom:22px}.gt-head small{font-size:9px;letter-spacing:.18em;color:var(--link-faint,#999)}.gt-head h1{font-size:38px;letter-spacing:-.05em;margin:4px 0 4px}.gt-head p{margin:0;color:var(--link-muted,#777);font-size:12px}
 .gt-sync{font-size:9px;color:var(--link-muted,#777);display:flex;align-items:center;gap:7px}.gt-sync i{width:7px;height:7px;border-radius:50%;background:#699a73;box-shadow:0 0 0 4px rgba(105,154,115,.12)}
 .gt-create{height:50px;background:var(--link-surface,#fff);border:1px solid var(--link-line,#ddd);border-radius:14px;display:flex;align-items:center;padding:0 8px 0 10px;box-shadow:var(--link-shadow,0 1px 2px rgba(0,0,0,.04))}
