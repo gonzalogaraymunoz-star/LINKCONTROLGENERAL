@@ -429,6 +429,51 @@ export async function POST(request: NextRequest) {
         },
       });
 
+      if (action === "schedule" || action === "snooze") {
+        const { data: businessLink } = current.global_id
+          ? await supabase.from("link_world_clients").select("business_id").eq("global_id", current.global_id).maybeSingle()
+          : { data: null };
+
+        const { data: source } = businessLink?.business_id
+          ? await supabase.from("link_world_calendar_sources").select("id,google_calendar_id,calendar_name").eq("business_id", businessLink.business_id).eq("status", "active").maybeSingle()
+          : await supabase.from("link_world_calendar_sources").select("id,google_calendar_id,calendar_name").eq("is_primary", true).eq("status", "active").maybeSingle();
+
+        if (source) {
+          await supabase.from("gesture_tasks").update({
+            calendar_source_id: source.id,
+            calendar_sync_status: "pending",
+            updated_at: now,
+          }).eq("id", id);
+
+          await supabase.from("command_bus").insert({
+            control_id: ROOT_CONTROL_ID,
+            command_type: "calendar_sync",
+            action_key: "calendar.event.upsert",
+            actor: "control-central",
+            target_provider: "google_calendar",
+            entity_type: current.entity_type || "gesture_task",
+            global_id: current.global_id,
+            payload: {
+              task_id: current.id,
+              task_gesture_code: current.gesture_code,
+              title: task.title,
+              starts_at: task.due_at,
+              duration_minutes: 30,
+              google_calendar_id: source.google_calendar_id,
+              calendar_name: source.calendar_name,
+            },
+            idempotency_key: "calendar:" + current.id + ":" + String(task.due_at),
+            status: "pending",
+            gesture_code: childGesture,
+            source_domain: "control",
+            parent_gesture_code: current.gesture_code,
+            correlation_id: current.id,
+            requires_approval: false,
+            approval_status: "not_required",
+          });
+        }
+      }
+
       return NextResponse.json({ ok: true, task, emittedGesture: childGesture });
     }
 
