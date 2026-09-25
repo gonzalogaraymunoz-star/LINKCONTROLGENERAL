@@ -41,6 +41,54 @@ type Product = {
   global_id?: string | null;
 };
 
+type DocumentRoute = {
+  id: string;
+  route_key: string;
+  folder_name: string;
+  folder_url: string;
+};
+
+type DocumentSpace = {
+  id: string;
+  business_name: string;
+  folder_url: string;
+  status: string;
+  routes: DocumentRoute[];
+};
+
+type FinancialSummary = {
+  open_transactions?: number | null;
+  missing_documents?: number | null;
+  open_closures?: number | null;
+  open_financial_tasks?: number | null;
+  pending_income?: number | string | null;
+  pending_expense?: number | string | null;
+  last_financial_movement_at?: string | null;
+};
+
+type FinanceTransaction = {
+  id: string;
+  status: string;
+  direction: string;
+  transaction_type: string;
+  amount?: number | string | null;
+  currency?: string | null;
+  documentary_status?: string | null;
+  occurred_at: string;
+};
+
+type LinkDocument = {
+  id: string;
+  document_type: string;
+  route_key?: string | null;
+  drive_url: string;
+  file_name: string;
+  issue_date?: string | null;
+  amount?: number | string | null;
+  currency?: string | null;
+  created_at: string;
+};
+
 type Client = {
   id: string;
   business_id?: string | null;
@@ -59,6 +107,10 @@ type Client = {
   global_id?: string | null;
   business?: Business | null;
   products: Product[];
+  documentSpace?: DocumentSpace | null;
+  financial?: FinancialSummary | null;
+  recentTransactions?: FinanceTransaction[];
+  recentDocuments?: LinkDocument[];
 };
 
 type Activity = {
@@ -1002,6 +1054,70 @@ function ClientDrawer({ client, close, guide }: { client: Client; close: () => v
         ) : null}
 
         <section className="lw-human-section">
+          <SectionTitle title="Documentos" count={client.recentDocuments?.length || 0} />
+          {client.documentSpace ? (
+            <>
+              <div className="lw-doc-root">
+                <div>
+                  <small>CARPETA DEL NEGOCIO</small>
+                  <b>{client.documentSpace.business_name}</b>
+                </div>
+                <a href={client.documentSpace.folder_url} target="_blank" rel="noreferrer">Abrir Drive ↗</a>
+              </div>
+              <div className="lw-doc-routes">
+                {client.documentSpace.routes.map((route) => (
+                  <a key={route.id} href={route.folder_url} target="_blank" rel="noreferrer">
+                    <span>{route.folder_name}</span><em>↗</em>
+                  </a>
+                ))}
+              </div>
+              {client.recentDocuments?.length ? (
+                <div className="lw-recent-docs">
+                  {client.recentDocuments.slice(0, 4).map((document) => (
+                    <a key={document.id} href={document.drive_url} target="_blank" rel="noreferrer">
+                      <div><b>{document.file_name}</b><small>{stateText(document.document_type)}</small></div>
+                      <span>↗</span>
+                    </a>
+                  ))}
+                </div>
+              ) : <p className="lw-human-note">Aún no hay documentos indexados para este negocio.</p>}
+            </>
+          ) : (
+            <p className="lw-human-note">Este negocio todavía no tiene una carpeta documental registrada en LINK WORLD.</p>
+          )}
+        </section>
+
+        <section className="lw-human-section">
+          <SectionTitle title="Finanzas" />
+          <div className="lw-finance-summary">
+            <FinanceMetric label="Transacciones abiertas" value={client.financial?.open_transactions} />
+            <FinanceMetric label="Respaldos pendientes" value={client.financial?.missing_documents} />
+            <FinanceMetric label="Cierres abiertos" value={client.financial?.open_closures} />
+            <FinanceMetric label="Tareas financieras" value={client.financial?.open_financial_tasks} />
+          </div>
+          {(Number(client.financial?.pending_income || 0) > 0 || Number(client.financial?.pending_expense || 0) > 0) ? (
+            <div className="lw-finance-money">
+              <div><small>POR COBRAR</small><strong>{money(Number(client.financial?.pending_income || 0), "CLP")}</strong></div>
+              <div><small>POR PAGAR</small><strong>{money(Number(client.financial?.pending_expense || 0), "CLP")}</strong></div>
+            </div>
+          ) : null}
+          {client.recentTransactions?.length ? (
+            <div className="lw-transaction-list">
+              {client.recentTransactions.slice(0, 5).map((transaction) => (
+                <article key={transaction.id}>
+                  <div>
+                    <b>{transaction.direction === "income" ? "Ingreso" : "Egreso"} · {stateText(transaction.transaction_type)}</b>
+                    <small>{stateText(transaction.status)} · respaldo {stateText(transaction.documentary_status)}</small>
+                  </div>
+                  <strong>{transaction.amount != null ? money(Number(transaction.amount), transaction.currency) : "—"}</strong>
+                </article>
+              ))}
+            </div>
+          ) : <p className="lw-human-note">Todavía no hay transacciones registradas para este negocio.</p>}
+          <Link className="lw-finance-open" href="/operacion">Abrir seguimiento financiero →</Link>
+        </section>
+
+        <section className="lw-human-section">
           <SectionTitle title="Qué falta para avanzar" count={pending.length} />
           {pending.length ? (
             <div className="lw-pending-list">
@@ -1167,6 +1283,15 @@ function HumanField({ label, value, wide }: { label: string; value: string; wide
 function RoleCard({ title, value, wide }: { title: string; value: string; wide?: boolean }) {
   if (!value) return null;
   return <div className={"lw-role-card" + (wide ? " wide" : "")}><small>{title}</small><p>{value}</p></div>;
+}
+
+function FinanceMetric({ label, value }: { label: string; value?: number | string | null }) {
+  return (
+    <div className="lw-finance-metric">
+      <strong>{Number(value || 0)}</strong>
+      <small>{label}</small>
+    </div>
+  );
 }
 
 function MoneyField({ label, value, currency }: { label: string; value?: number | null; currency?: string | null }) {
