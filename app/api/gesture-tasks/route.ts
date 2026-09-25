@@ -9,7 +9,7 @@ function gestureCode() {
 
 function titleFromEvent(eventType: string) {
   const map: Record<string, string> = {
-    "counterparty.registered": "Revisar nueva contraparte",
+    "counterparty.registered": "Revisar nuevo Link",
     "product.created": "Revisar producto creado",
     "business.created": "Revisar negocio creado",
     "business.updated": "Revisar cambios del negocio",
@@ -63,10 +63,10 @@ function taskGuidance(task: Record<string, any>, entity?: Record<string, any> | 
     const relation = entity?.relationship_state || "sin definir";
     const agreement = entity?.agreement_status || "sin definir";
     return {
-      context_summary: `${name} fue registrada por LINK WORLD como contraparte${businessName}. Relación: ${relation}. Acuerdo comercial: ${agreement}.`,
-      objective: "Convertir la contraparte detectada en una relación comercial claramente definida y operable.",
+      context_summary: `${name} fue registrado por LINK WORLD como un Link comercial${businessName}. Relación: ${relation}. Acuerdo comercial: ${agreement}.`,
+      objective: "Convertir el Link detectado en una relación comercial claramente definida y operable.",
       resolution_criteria: "Debe quedar definido el estado de la relación, el estado del acuerdo y un siguiente paso concreto: operar, negociar, esperar o descartar.",
-      recommended_action: "Revisar la ficha de la contraparte, validar las condiciones comerciales y registrar la decisión o siguiente acción.",
+      recommended_action: "Revisar la ficha del Link, validar las condiciones comerciales y registrar la decisión o siguiente acción.",
     };
   }
 
