@@ -1,0 +1,117 @@
+.boardPage{
+  min-height:100vh;background:#f5f4f0;color:#1f1f1d;
+  font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+}
+.boardPage *{box-sizing:border-box}
+.topbar{
+  position:sticky;top:0;z-index:50;height:72px;padding:0 22px;
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+  border-bottom:1px solid #dddcd5;background:rgba(250,249,246,.96);backdrop-filter:blur(14px)
+}
+.topLeft{display:flex;align-items:center;gap:18px}
+.back{color:#5e5d57;text-decoration:none;font-size:10px}
+.topLeft small{display:block;font-size:7px;letter-spacing:.16em;color:#99978f}
+.topLeft h1{font-size:15px;margin:2px 0 0;letter-spacing:-.03em}
+.topActions{display:flex;align-items:center;gap:10px}
+.sync{display:flex;align-items:center;gap:6px;font-size:8px;color:#77766e}
+.sync i{width:7px;height:7px;border-radius:50%;background:#76a77d}
+.createButton,.primary{
+  border:0;background:#20201e;color:#fff;border-radius:10px;padding:9px 12px;font-size:9px;font-weight:650;cursor:pointer
+}
+.toolbar{
+  display:grid;grid-template-columns:minmax(280px,1fr) auto;gap:12px;padding:14px 20px 10px;
+  border-bottom:1px solid #e2e1da;background:#f8f7f4
+}
+.searchBox{height:40px;display:flex;align-items:center;gap:8px;border:1px solid #dddcd5;border-radius:11px;background:#fff;padding:0 11px}
+.searchBox span{font-size:15px;color:#9b9a93}.searchBox input{width:100%;border:0;outline:0;background:transparent;font-size:11px;color:#222}
+.views{display:flex;align-items:center;border:1px solid #dddcd5;background:#fff;border-radius:10px;padding:3px}
+.views button{height:32px;border:0;background:transparent;color:#77766f;border-radius:8px;padding:0 12px;font-size:9px;cursor:pointer}
+.views .activeView{background:#20201e;color:#fff}
+.filters{
+  display:flex;align-items:end;gap:7px;padding:8px 20px 12px;border-bottom:1px solid #dddcd5;background:#f8f7f4;
+  overflow-x:auto;scrollbar-width:none
+}
+.filters::-webkit-scrollbar{display:none}
+.filter{flex:0 0 128px}
+.filter span{display:block;font-size:6.5px;letter-spacing:.1em;text-transform:uppercase;color:#98978f;margin:0 0 4px 2px}
+.filter select,.filter input{
+  width:100%;height:34px;border:1px solid #dddcd5;border-radius:9px;background:#fff;color:#333;padding:0 8px;font-size:8.5px;outline:0
+}
+.clearFilters{height:34px;border:1px solid #dddcd5;background:transparent;border-radius:9px;padding:0 10px;font-size:8px;color:#777;cursor:pointer}
+.workspace{padding:14px 20px 28px;min-height:calc(100vh - 170px)}
+.error{padding:10px 12px;margin-bottom:10px;border:1px solid #e0c7c0;border-radius:10px;background:#f4e7e4;color:#7a4b43;font-size:9px}
+.loading,.empty{padding:44px 14px;text-align:center;color:#99978f;font-size:9px}
+
+.list{border-top:1px solid #dddcd5}
+.listRow{
+  width:100%;display:grid;grid-template-columns:7px minmax(220px,1fr) auto auto 115px 12px;gap:10px;align-items:center;
+  border:0;border-bottom:1px solid #e5e4de;background:transparent;padding:11px 4px;text-align:left;color:inherit;cursor:pointer
+}
+.listRow:hover{background:#efeee9}.listRow>i{width:7px;height:7px;border-radius:50%}
+.listCopy b{display:block;font-size:10.5px}.listCopy span{display:block;font-size:8px;color:#88877f;margin-top:3px}
+.statePill,.priorityPill{font-size:7px;border:1px solid #dddcd5;border-radius:999px;padding:4px 6px;color:#6f6e67;background:#fafaf8;white-space:nowrap}
+.listRow time{font-size:8px;color:#77766f;text-align:right}.listRow em{font-style:normal;color:#aaa}
+
+.kanban{
+  display:grid;grid-auto-flow:column;grid-auto-columns:minmax(250px,1fr);gap:10px;
+  overflow-x:auto;padding-bottom:12px;min-height:calc(100vh - 215px);scrollbar-width:thin
+}
+.kanbanColumn{background:#ebeae5;border:1px solid #dad9d2;border-radius:13px;padding:8px;min-height:560px;transition:.12s ease}
+.dropOver{outline:2px solid #8d8c84;outline-offset:-2px;background:#e5e4de}
+.kanbanColumn>header{display:flex;justify-content:space-between;align-items:flex-start;padding:3px 4px 9px}
+.kanbanColumn>header b{display:block;font-size:10px}.kanbanColumn>header small{display:block;font-size:7px;color:#97968f;margin-top:2px}
+.kanbanColumn>header>span{font-size:8px;background:#f7f6f3;border-radius:999px;padding:3px 6px;color:#777}
+.cards{display:grid;gap:7px}
+.card{
+  border:1px solid #deddd7;border-top:3px solid #d7d4cc;border-radius:10px;background:#fff;padding:10px;
+  cursor:grab;box-shadow:0 1px 1px rgba(0,0,0,.025);transition:.12s ease
+}
+.card:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.05)}.dragging{opacity:.45;cursor:grabbing}
+.cardMeta{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cardMeta span{display:flex;align-items:center;gap:5px;min-width:0;font-size:7px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cardMeta span i{width:6px;height:6px;border-radius:50%;flex:none}.cardMeta em{font-style:normal;font-size:6px;text-transform:uppercase;letter-spacing:.05em;border-radius:999px;padding:2px 5px}
+.priority1{background:#f1e2de;color:#8b5146}.priority2{background:#f2eadb;color:#866a39}.priority3{background:#e8ece7;color:#607062}
+.card h3{font-size:10.5px;line-height:1.35;margin:7px 0 5px}.card p{font-size:8px;line-height:1.4;color:#707069;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cardRelations{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px}.cardRelations span{font-size:6.8px;color:#777;border:1px solid #e3e2dc;border-radius:999px;padding:3px 5px}
+.card footer{display:flex;justify-content:space-between;gap:8px;margin-top:8px;padding-top:7px;border-top:1px solid #efeee9;color:#919088;font-size:7px}
+.columnEmpty{border:1px dashed #cfcec7;border-radius:10px;padding:22px 8px;text-align:center;font-size:7.5px;color:#999;background:rgba(255,255,255,.25)}
+
+.calendar{background:#fff;border:1px solid #dddcd5;border-radius:13px;overflow:hidden}
+.calendarHeader{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:10px;border-bottom:1px solid #e2e1da}
+.calendarNav,.calendarModes{display:flex;align-items:center;gap:5px}.calendarNav button,.calendarModes button{border:1px solid #dddcd5;background:#fff;border-radius:8px;height:30px;padding:0 9px;font-size:8px;color:#666;cursor:pointer}
+.calendarNav b{font-size:11px;margin-left:6px;text-transform:capitalize}.calendarModes .calendarModeOn{background:#20201e;color:#fff;border-color:#20201e}
+.dayCalendar{padding:8px 12px}.calendarRow{width:100%;display:grid;grid-template-columns:70px 7px 1fr;gap:9px;align-items:center;border:0;border-bottom:1px solid #ecebe6;background:transparent;padding:10px 2px;text-align:left;cursor:pointer}
+.calendarRow time{font-size:8px;color:#777}.calendarRow i{width:7px;height:7px;border-radius:50%}.calendarRow b{display:block;font-size:10px}.calendarRow span{display:block;font-size:7px;color:#888;margin-top:2px}
+.weekGrid{display:grid;grid-template-columns:repeat(7,minmax(125px,1fr));min-height:560px;overflow-x:auto}
+.weekDay{border-right:1px solid #e5e4de}.weekDay:last-child{border-right:0}.weekDay>header{padding:9px;border-bottom:1px solid #e5e4de}.weekDay>header small{display:block;font-size:7px;text-transform:uppercase;color:#999}.weekDay>header b{font-size:15px}.weekDay>div{padding:6px;display:grid;gap:5px}
+.calendarChip{width:100%;border:1px solid #e2e1dc;border-left:3px solid #bbb;border-radius:7px;background:#fafaf8;padding:6px;text-align:left;color:#333;cursor:pointer}.calendarChip b{font-size:7.5px;line-height:1.3;display:block}
+.monthGrid{display:grid;grid-template-columns:repeat(7,1fr)}.monthDay{min-height:115px;border-right:1px solid #e5e4de;border-bottom:1px solid #e5e4de;padding:6px}.monthDay:nth-child(7n){border-right:0}.monthDay>header{font-size:8px;color:#666;margin-bottom:5px}.mutedDay{background:#f7f6f3;color:#aaa}.compactChip{padding:4px;margin-bottom:3px}.compactChip b{font-size:6.7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.monthDay>small{font-size:6.5px;color:#999}
+.yearGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px}.yearGrid button{border:1px solid #e0dfd9;border-radius:11px;background:#fafaf8;padding:16px;text-align:left;cursor:pointer}.yearGrid button:hover{background:#f1f0eb}.yearGrid b{display:block;font-size:11px;text-transform:capitalize}.yearGrid strong{display:block;font-size:26px;letter-spacing:-.04em;margin-top:16px}.yearGrid span{font-size:7px;color:#888}
+
+.overlay,.modalOverlay{position:fixed;inset:0;z-index:100;background:rgba(25,25,23,.24);backdrop-filter:blur(5px);display:flex;justify-content:flex-end}
+.drawer{width:min(520px,94vw);height:100%;overflow:auto;background:#faf9f6;border-left:1px solid #d8d7d0;padding:0 20px 24px;box-shadow:-22px 0 55px rgba(0,0,0,.11)}
+.drawer>header{position:sticky;top:0;z-index:3;display:flex;justify-content:space-between;gap:16px;background:rgba(250,249,246,.96);backdrop-filter:blur(12px);border-bottom:1px solid #dddcd5;padding:20px 0 15px}
+.drawer>header small,.modal header small{font-size:7px;letter-spacing:.12em;color:#999}.drawer>header h2,.modal header h2{font-size:24px;letter-spacing:-.04em;margin:5px 0 0}.drawer>header button,.modal header button{width:32px;height:32px;border:1px solid #dddcd5;border-radius:50%;background:#fff;font-size:18px;cursor:pointer}
+.drawerSection{padding:17px 0;border-bottom:1px solid #e4e3dd}.drawerSection h3{font-size:11px;margin:0 0 10px}.drawerSection p{font-size:9px;line-height:1.5;color:#666}
+.drawerSection label,.modal label{display:grid;gap:5px;font-size:7px;text-transform:uppercase;letter-spacing:.08em;color:#8e8d85;margin-bottom:9px}
+.drawerSection input,.drawerSection textarea,.drawerSection select,.modal input,.modal textarea,.modal select{width:100%;border:1px solid #dddcd5;border-radius:9px;background:#fff;color:#222;padding:9px;font:inherit;font-size:9px;outline:0}.drawerSection textarea,.modal textarea{min-height:78px;resize:vertical}
+.twoFields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.infoGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.info{padding:8px 0}.info small{display:block;font-size:6.5px;text-transform:uppercase;letter-spacing:.08em;color:#999;margin-bottom:4px}.info b{font-size:9px;line-height:1.4;overflow-wrap:anywhere}
+.docs{display:grid}.docs a{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #ecebe6;text-decoration:none;color:#222}.docs b{display:block;font-size:9px}.docs small{display:block;font-size:7px;color:#888;margin-top:2px}
+.moveButtons{display:flex;gap:5px;flex-wrap:wrap}.moveButtons button{border:1px solid #dddcd5;background:#fff;border-radius:8px;padding:6px 8px;font-size:7.5px;color:#555;cursor:pointer}
+.trace{padding-top:14px}.trace summary{font-size:7px;letter-spacing:.08em;color:#999;cursor:pointer}.externalLink{display:inline-flex;margin-top:10px;color:#222;font-size:9px;text-decoration:none;border-bottom:1px solid #aaa}
+
+.modalOverlay{align-items:center;justify-content:center}
+.modal{width:min(560px,92vw);max-height:88vh;overflow:auto;background:#faf9f6;border:1px solid #d8d7d0;border-radius:16px;padding:18px;box-shadow:0 22px 80px rgba(0,0,0,.18)}
+.modal header{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.modal header p{font-size:9px;color:#777;margin:4px 0 0}.modal footer{display:flex;justify-content:flex-end;gap:7px;border-top:1px solid #e2e1db;padding-top:12px;margin-top:10px}.modal footer button{border:1px solid #dddcd5;background:#fff;border-radius:9px;padding:8px 10px;font-size:8px;cursor:pointer}.modal footer .primary{background:#20201e;color:#fff;border-color:#20201e}
+
+@media(max-width:900px){
+  .topbar{padding:0 12px}.toolbar{grid-template-columns:1fr}.views{justify-self:start}.workspace{padding:12px}
+  .yearGrid{grid-template-columns:repeat(3,1fr)}.kanban{grid-auto-columns:minmax(270px,78vw)}
+}
+@media(max-width:620px){
+  .topbar{height:62px}.topLeft>div{display:none}.topActions .sync{display:none}.toolbar{padding:10px}.filters{padding:7px 10px 10px}.filter{flex-basis:118px}.workspace{padding:10px}
+  .listRow{grid-template-columns:7px 1fr auto 12px}.listRow .statePill,.listRow .priorityPill{display:none}.listRow time{grid-column:2;text-align:left}
+  .calendarHeader{display:block}.calendarModes{margin-top:8px}.weekGrid{grid-template-columns:repeat(7,minmax(160px,1fr))}.monthGrid{min-width:760px}.calendar{overflow-x:auto}.yearGrid{grid-template-columns:repeat(2,1fr)}
+  .twoFields,.infoGrid{grid-template-columns:1fr}
+}
