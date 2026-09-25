@@ -24,6 +24,9 @@
 }
 .searchBox{height:40px;display:flex;align-items:center;gap:8px;border:1px solid #dddcd5;border-radius:11px;background:#fff;padding:0 11px}
 .searchBox span{font-size:15px;color:#9b9a93}.searchBox input{width:100%;border:0;outline:0;background:transparent;font-size:11px;color:#222}
+.toolbarActions{display:flex;align-items:center;gap:7px}
+.todayButton{height:38px;border:1px solid #bbb9b1;background:#fff;color:#222;border-radius:10px;padding:0 14px;font-size:9px;font-weight:750;letter-spacing:.08em;cursor:pointer}
+.todayButton:hover{background:#f0efea}.todayButtonActive{background:#20201e;color:#fff;border-color:#20201e}
 .views{display:flex;align-items:center;border:1px solid #dddcd5;background:#fff;border-radius:10px;padding:3px}
 .views button{height:32px;border:0;background:transparent;color:#77766f;border-radius:8px;padding:0 12px;font-size:9px;cursor:pointer}
 .views .activeView{background:#20201e;color:#fff}
@@ -151,11 +154,11 @@
 .modal header{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.modal header p{font-size:9px;color:#777;margin:4px 0 0}.modal footer{display:flex;justify-content:flex-end;gap:7px;border-top:1px solid #e2e1db;padding-top:12px;margin-top:10px}.modal footer button{border:1px solid #dddcd5;background:#fff;border-radius:9px;padding:8px 10px;font-size:8px;cursor:pointer}.modal footer .primary{background:#20201e;color:#fff;border-color:#20201e}
 
 @media(max-width:900px){
-  .topbar{padding:0 12px}.toolbar{grid-template-columns:1fr}.views{justify-self:start}.workspace{padding:12px}
+  .topbar{padding:0 12px}.toolbar{grid-template-columns:1fr}.toolbarActions{justify-self:start}.workspace{padding:12px}
   .yearGrid{grid-template-columns:repeat(3,1fr)}.kanban{grid-auto-columns:minmax(270px,78vw)}
 }
 @media(max-width:620px){
-  .topbar{height:62px}.topLeft>div{display:none}.topActions .sync{display:none}.toolbar{padding:10px}.filters{padding:7px 10px 10px}.filter{flex-basis:118px}.workspace{padding:10px}
+  .topbar{height:62px}.topLeft>div{display:none}.topActions .sync{display:none}.toolbar{padding:10px}.toolbarActions{width:100%;justify-content:space-between}.todayButton{height:36px}.filters{padding:7px 10px 10px}.filter{flex-basis:118px}.workspace{padding:10px}
   .tableShell{border-radius:10px}.tableToolbar{position:sticky;left:0}.tableScroll{max-height:none}.tableHeader,.tableRow,.tableGroupHeader{min-width:1180px}.tableHeader,.tableRow{grid-template-columns:92px 105px 95px 105px 72px minmax(230px,1.8fr) 95px 70px 95px 84px 34px}
   .calendarHeader{display:block}.calendarModes{margin-top:8px}.weekGrid{grid-template-columns:repeat(7,minmax(160px,1fr))}.monthGrid{min-width:760px}.calendar{overflow-x:auto}.yearGrid{grid-template-columns:repeat(2,1fr)}
   .twoFields,.infoGrid{grid-template-columns:1fr}
