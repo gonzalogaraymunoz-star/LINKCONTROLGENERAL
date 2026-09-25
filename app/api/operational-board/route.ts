@@ -249,6 +249,7 @@ export async function GET() {
       calendarsResult,
       financeResult,
       documentsResult,
+      preferencesResult,
     ] = await Promise.all([
       supabase.from("gesture_tasks")
         .select("*")
@@ -278,6 +279,10 @@ export async function GET() {
         .select("id,business_id,transaction_id,closure_id,counterparty_id,product_id,document_type,route_key,drive_url,file_name,issue_date,amount,currency,created_at")
         .order("created_at", { ascending: false })
         .limit(300),
+      supabase.from("operational_board_preferences")
+        .select("preference_key,view_mode,calendar_mode,filters,updated_at")
+        .eq("preference_key", "default")
+        .maybeSingle(),
     ]);
 
     const firstError = [
@@ -289,6 +294,7 @@ export async function GET() {
       calendarsResult.error,
       financeResult.error,
       documentsResult.error,
+      preferencesResult.error,
     ].find(Boolean);
 
     if (firstError) {
@@ -403,6 +409,12 @@ export async function GET() {
       links: clients,
       products,
       calendars,
+      preferences: preferencesResult.data || {
+        preference_key: "default",
+        view_mode: "kanban",
+        calendar_mode: "week",
+        filters: {},
+      },
       counts: {
         active: tasks.filter((task) => !["resolved", "financially_closed"].includes(task.workflow_state)).length,
         today: tasks.filter((task) => task.due_at && new Date(task.due_at).toDateString() === new Date().toDateString() && !["resolved", "financially_closed"].includes(task.workflow_state)).length,
@@ -430,6 +442,21 @@ export async function POST(request: NextRequest) {
   const action = String(body.action || "");
 
   try {
+    if (action === "save_preferences") {
+      const viewMode = ["list","calendar","kanban"].includes(String(body.viewMode)) ? String(body.viewMode) : "kanban";
+      const calendarMode = ["day","week","month","year"].includes(String(body.calendarMode)) ? String(body.calendarMode) : "week";
+      const filters = body.filters && typeof body.filters === "object" ? body.filters : {};
+      const { data, error } = await supabase.from("operational_board_preferences").upsert({
+        preference_key: "default",
+        view_mode: viewMode,
+        calendar_mode: calendarMode,
+        filters,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "preference_key" }).select("*").single();
+      if (error) throw error;
+      return NextResponse.json({ ok: true, preferences: data });
+    }
+
     if (action === "create") {
       const title = String(body.title || "").trim();
       if (!title) return NextResponse.json({ ok: false, error: "title_required" }, { status: 400 });
