@@ -216,7 +216,7 @@ export async function GET() {
   try {
     await syncLinkWorldGestures(supabase);
 
-    const [tasksResult, businessesResult, clientsResult, productsResult, agendaResult] = await Promise.all([
+    const [tasksResult, businessesResult, clientsResult, productsResult, agendaResult, calendarSourcesResult] = await Promise.all([
       supabase.from("gesture_tasks")
         .select("*")
         .neq("status", "cancelled")
@@ -228,13 +228,16 @@ export async function GET() {
       supabase.from("link_world_clients").select("id,name,global_id,business_id,role,relationship_state,agreement_status,summary,owned_facts"),
       supabase.from("link_world_products").select("id,name,global_id,business_id,client_id,stage,economic_state,public_price,acquisition_price,link_share_percent"),
       supabase.from("link_world_calendar_events")
-        .select("id,title,description,starts_at,ends_at,event_url,event_kind,business_id,business_global_id,gesture_code,source_id")
+        .select("id,title,description,starts_at,ends_at,event_url,event_kind,business_id,business_global_id,gesture_code,source_id,priority")
         .gte("ends_at", new Date().toISOString())
         .order("starts_at", { ascending: true })
-        .limit(60),
+        .limit(120),
+      supabase.from("link_world_calendar_sources")
+        .select("id,calendar_name,business_id,business_global_id,is_primary,google_color_id,background_color,source_scope,status")
+        .eq("status", "active"),
     ]);
 
-    const firstError = [tasksResult.error, businessesResult.error, clientsResult.error, productsResult.error, agendaResult.error].find(Boolean);
+    const firstError = [tasksResult.error, businessesResult.error, clientsResult.error, productsResult.error, agendaResult.error, calendarSourcesResult.error].find(Boolean);
     if (firstError) return NextResponse.json({ ok: false, error: firstError.message }, { status: 500 });
 
     const entityNames = new Map<string, string>();
@@ -243,7 +246,7 @@ export async function GET() {
     for (const row of businessesResult.data || []) {
       if (!row.global_id) continue;
       entityNames.set(row.global_id, row.name);
-      entityContext.set(row.global_id, row);
+      entityContext.set(row.global_id, { ...row, business_id: row.id, business_name: row.name, business_global_id: row.global_id });
     }
 
     const businessById = new Map((businessesResult.data || []).map((row) => [row.id, row]));
@@ -251,25 +254,51 @@ export async function GET() {
     for (const row of clientsResult.data || []) {
       if (!row.global_id) continue;
       const business = row.business_id ? businessById.get(row.business_id) : null;
-      const enriched = { ...row, business_name: business?.name || null };
+      const enriched = { ...row, business_name: business?.name || null, business_global_id: business?.global_id || null };
       entityNames.set(row.global_id, row.name);
       entityContext.set(row.global_id, enriched);
     }
 
     for (const row of productsResult.data || []) {
       if (!row.global_id) continue;
+      const business = row.business_id ? businessById.get(row.business_id) : null;
       entityNames.set(row.global_id, row.name);
-      entityContext.set(row.global_id, row);
+      entityContext.set(row.global_id, { ...row, business_name: business?.name || null, business_global_id: business?.global_id || null });
     }
+
+    const calendarSources = calendarSourcesResult.data || [];
+    const sourceById = new Map(calendarSources.map((source) => [source.id, source]));
+    const sourceByBusinessId = new Map(calendarSources.filter((source) => source.business_id).map((source) => [source.business_id, source]));
+    const primarySource = calendarSources.find((source) => source.is_primary) || null;
 
     const tasks = (tasksResult.data || []).map((task) => {
       const entity = task.global_id ? entityContext.get(task.global_id) || null : null;
       const entityName = task.global_id ? entityNames.get(task.global_id) || null : null;
       const guidance = taskGuidance({ ...task, entity_name: entityName }, entity);
+      const businessId = entity?.business_id || null;
+      const business = businessId ? businessById.get(businessId) || null : null;
+      const calendarSource = businessId ? sourceByBusinessId.get(businessId) || null : primarySource;
       return {
         ...task,
         ...guidance,
         entity_name: entityName,
+        business_id: businessId,
+        business_name: entity?.business_name || business?.name || (calendarSource?.is_primary ? "Personal" : null),
+        business_global_id: entity?.business_global_id || business?.global_id || null,
+        business_color: calendarSource?.background_color || "#d7d4cc",
+        calendar_name: calendarSource?.calendar_name || null,
+      };
+    });
+
+    const agenda = (agendaResult.data || []).map((event) => {
+      const source = sourceById.get(event.source_id) || null;
+      const business = event.business_id ? businessById.get(event.business_id) || null : null;
+      return {
+        ...event,
+        business_name: business?.name || source?.calendar_name || "Sin negocio",
+        business_color: source?.background_color || "#d7d4cc",
+        calendar_name: source?.calendar_name || null,
+        source_scope: source?.source_scope || null,
       };
     });
 
@@ -277,13 +306,14 @@ export async function GET() {
       ok: true,
       generatedAt: new Date().toISOString(),
       tasks,
-      agenda: agendaResult.data || [],
+      agenda,
+      calendars: calendarSources,
       counts: {
         open: tasks.filter((task) => task.status === "open" && !task.due_at).length,
         scheduled: tasks.filter((task) => task.status === "open" && task.due_at).length,
         done: tasks.filter((task) => task.status === "done").length,
         world: tasks.filter((task) => task.source_domain === "world").length,
-        agenda: (agendaResult.data || []).length,
+        agenda: agenda.length,
       },
     });
   } catch (reason) {
@@ -301,6 +331,21 @@ export async function POST(request: NextRequest) {
   const action = String(body.action || "");
 
   try {
+    if (action === "update_calendar_priority") {
+      const id = String(body.id || "");
+      const priority = Number(body.priority);
+      if (!id || ![1, 2, 3].includes(priority)) {
+        return NextResponse.json({ ok: false, error: "invalid_calendar_priority" }, { status: 400 });
+      }
+      const { data, error } = await supabase.from("link_world_calendar_events")
+        .update({ priority, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select("id,priority")
+        .single();
+      if (error) throw error;
+      return NextResponse.json({ ok: true, event: data });
+    }
+
     if (action === "create") {
       const title = String(body.title || "").trim();
       if (!title) return NextResponse.json({ ok: false, error: "title_required" }, { status: 400 });
