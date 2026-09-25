@@ -14,6 +14,10 @@ type GestureTask = {
   entity_name?: string | null;
   title: string;
   note?: string | null;
+  context_summary?: string | null;
+  objective?: string | null;
+  resolution_criteria?: string | null;
+  recommended_action?: string | null;
   status: "open" | "done" | "snoozed" | "cancelled";
   priority: number;
   task_kind?: string | null;
@@ -227,8 +231,8 @@ function GestureRow({
         <span>
           {task.task_kind === "financial_closure" ? "CIERRE FINANCIERO" : task.task_kind === "financial_transaction" ? "FINANZAS" : task.source_domain === "world" ? "LINK WORLD" : "CONTROL CENTRAL"}
           {task.entity_name ? " · " + task.entity_name : ""}
-          {task.origin_event_type ? " · " + humanize(task.origin_event_type) : ""}
         </span>
+        {task.objective ? <em>{task.objective}</em> : null}
       </button>
 
       <div className="gt-row-meta">
@@ -241,23 +245,49 @@ function GestureRow({
 
       {open ? (
         <div className="gt-detail">
-          {task.task_kind?.startsWith("financial_") ? <div><small>TIPO</small><b>{task.task_kind === "financial_closure" ? "Cierre financiero" : "Transacción"}</b></div> : null}
-          <div>
-            <small>GESTO</small>
-            <code>{task.gesture_code}</code>
-          </div>
-          {task.entity_type ? <div><small>ENTIDAD</small><b>{humanize(task.entity_type)}</b></div> : null}
-          {task.global_id ? <div><small>GLOBAL ID</small><code>{task.global_id}</code></div> : null}
-          {task.note ? <p>{task.note}</p> : null}
+          <section className="gt-explain gt-context">
+            <small>QUÉ PASÓ</small>
+            <p>{task.context_summary || task.note || "LINK WORLD generó este gesto."}</p>
+          </section>
+
+          <section className="gt-explain gt-resolve">
+            <small>QUÉ HAY QUE RESOLVER</small>
+            <b>{task.recommended_action || "Revisar el contexto y registrar una decisión."}</b>
+          </section>
+
+          <section className="gt-explain">
+            <small>OBJETIVO</small>
+            <p>{task.objective || "Resolver el gesto y devolver un estado claro a LINK WORLD."}</p>
+          </section>
+
+          <section className="gt-explain">
+            <small>SE CONSIDERA RESUELTO CUANDO</small>
+            <p>{task.resolution_criteria || "Existe un resultado verificable y el gesto queda actualizado."}</p>
+          </section>
+
           <div className="gt-detail-actions">
             {!done ? (
               <>
+                <button className="primary" onClick={() => act("complete", task.id)}>Marcar resuelto</button>
                 <button onClick={() => act("snooze", task.id, { dueAt: tomorrowAtNine() })}>Mañana</button>
                 <button onClick={() => act("snooze", task.id, { dueAt: nextWeekAtNine() })}>Próxima semana</button>
               </>
-            ) : null}
+            ) : (
+              <button onClick={() => act("reopen", task.id)}>Reabrir</button>
+            )}
             <button className="danger" onClick={() => act("cancel", task.id)}>Quitar</button>
           </div>
+
+          <details className="gt-trace">
+            <summary>Trazabilidad técnica</summary>
+            <div className="gt-trace-grid">
+              {task.task_kind?.startsWith("financial_") ? <div><small>TIPO</small><b>{task.task_kind === "financial_closure" ? "Cierre financiero" : "Transacción"}</b></div> : null}
+              <div><small>GESTO</small><code>{task.gesture_code}</code></div>
+              {task.entity_type ? <div><small>ENTIDAD</small><b>{humanize(task.entity_type)}</b></div> : null}
+              {task.global_id ? <div><small>GLOBAL ID</small><code>{task.global_id}</code></div> : null}
+              {task.origin_event_type ? <div><small>EVENTO</small><b>{humanize(task.origin_event_type)}</b></div> : null}
+            </div>
+          </details>
         </div>
       ) : null}
     </article>
@@ -302,11 +332,11 @@ const css = `
 .gt-world-filter{letter-spacing:.08em}.gt-world-filter.on{background:#171716!important;color:#fff!important}
 .gt-list{margin-top:0}.gt-row{position:relative;display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:9px;align-items:center;min-height:64px;border-bottom:1px solid var(--link-soft,#e9e9e4);padding:7px 4px}.gt-row.done .gt-row-copy b{text-decoration:line-through;color:var(--link-faint,#999)}
 .gt-check{width:21px;height:21px;border:1.4px solid #969a96;border-radius:50%;background:transparent;color:#fff;font-size:11px;cursor:pointer}.gt-row.done .gt-check{background:#5f8f69;border-color:#5f8f69}.gt-check:disabled{opacity:.5}
-.gt-row-copy{border:0;background:transparent;color:inherit;text-align:left;min-width:0;cursor:pointer}.gt-row-copy b{display:block;font-size:13px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-row-copy span{display:block;font-size:9px;color:var(--link-muted,#777);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gt-row-copy{border:0;background:transparent;color:inherit;text-align:left;min-width:0;cursor:pointer}.gt-row-copy b{display:block;font-size:13px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-row-copy span{display:block;font-size:9px;color:var(--link-muted,#777);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-row-copy em{display:block;margin-top:5px;font-style:normal;font-size:10px;line-height:1.35;color:var(--link-muted,#666);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gt-row-meta{display:flex;align-items:center;gap:8px}.gt-row-meta time{font-size:9px;color:var(--link-muted,#777)}.gt-row-meta>span{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:10px}.gt-row-meta>span.world{background:#e8efe8;color:#42674a}.gt-row-meta>span.control{background:#ededeb;color:#555}.gt-more{border:0;background:transparent;color:#888;padding:5px;cursor:pointer}
-.gt-detail{grid-column:2/-1;border-left:1px solid var(--link-line,#ddd);margin:2px 0 8px;padding:9px 0 7px 14px;display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}.gt-detail small{display:block;font-size:8px;letter-spacing:.12em;color:var(--link-faint,#999);margin-bottom:3px}.gt-detail b,.gt-detail code{font-size:9px;font-family:inherit;overflow-wrap:anywhere}.gt-detail p{grid-column:1/-1;margin:0;font-size:10px;color:var(--link-muted,#777)}.gt-detail-actions{grid-column:1/-1;display:flex;gap:6px;margin-top:3px}.gt-detail-actions button{border:1px solid var(--link-line,#ddd);background:var(--link-surface,#fff);color:inherit;border-radius:8px;padding:6px 8px;font-size:9px}.gt-detail-actions button.danger{color:#8d5549}
+.gt-detail{grid-column:2/-1;border-left:1px solid var(--link-line,#ddd);margin:4px 0 10px;padding:10px 0 8px 16px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.gt-detail small{display:block;font-size:8px;letter-spacing:.12em;color:var(--link-faint,#999);margin-bottom:5px}.gt-explain{border:1px solid var(--link-soft,#e7e7e2);background:var(--link-surface,#fff);border-radius:10px;padding:11px 12px;min-height:78px}.gt-explain p{margin:0;font-size:10px;line-height:1.5;color:var(--link-muted,#666)}.gt-explain b{display:block;font-size:11px;line-height:1.45;font-weight:600}.gt-context{grid-column:1/-1;min-height:auto;background:var(--link-surface-2,#f1f1ee)}.gt-resolve{grid-column:1/-1;min-height:auto;border-color:#d4d4ce}.gt-detail-actions{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}.gt-detail-actions button{border:1px solid var(--link-line,#ddd);background:var(--link-surface,#fff);color:inherit;border-radius:8px;padding:7px 9px;font-size:9px;cursor:pointer}.gt-detail-actions button.primary{background:var(--link-accent,#1e1e1c);color:var(--link-accent-text,#fff);border-color:var(--link-accent,#1e1e1c)}.gt-detail-actions button.danger{color:#8d5549}.gt-trace{grid-column:1/-1;margin-top:3px;border-top:1px solid var(--link-soft,#e7e7e2);padding-top:8px}.gt-trace summary{cursor:pointer;font-size:8px;letter-spacing:.08em;color:var(--link-faint,#999);list-style:none}.gt-trace summary::-webkit-details-marker{display:none}.gt-trace-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;padding-top:10px}.gt-trace-grid b,.gt-trace-grid code{font-size:9px;font-family:inherit;overflow-wrap:anywhere}
 .gt-empty{padding:50px 10px;text-align:center;color:var(--link-muted,#777)}.gt-empty span{width:34px;height:34px;border-radius:50%;border:1px solid var(--link-line,#ddd);display:grid;place-items:center;margin:0 auto 12px}.gt-empty b{display:block;font-size:12px}.gt-empty p{font-size:10px;margin:5px 0}
 .gt-error{margin:10px 0;border:1px solid #e4c9c3;background:#f4e8e5;color:#7b4c42;border-radius:10px;padding:10px 12px;font-size:10px}
 .gt-footer{display:flex;justify-content:space-between;gap:20px;border-top:1px solid var(--link-line,#ddd);margin-top:28px;padding-top:12px;color:var(--link-faint,#999);font-size:8px;letter-spacing:.04em}
-@media(max-width:760px){.gt-page{display:block}.gt-nav{position:relative;width:100%;height:auto;border-right:0;border-bottom:1px solid var(--link-line,#ddd);padding:10px 12px}.gt-logo{display:none}.gt-nav nav{display:flex}.gt-nav nav a{padding:8px 10px}.gt-nav-foot{display:none}.gt-main{width:100%;padding:26px 14px 50px}.gt-head h1{font-size:32px}.gt-detail{grid-column:1/-1;margin-left:32px}.gt-footer{display:block;line-height:1.8}}
+@media(max-width:760px){.gt-page{display:block}.gt-nav{position:relative;width:100%;height:auto;border-right:0;border-bottom:1px solid var(--link-line,#ddd);padding:10px 12px}.gt-logo{display:none}.gt-nav nav{display:flex}.gt-nav nav a{padding:8px 10px}.gt-nav-foot{display:none}.gt-main{width:100%;padding:26px 14px 50px}.gt-head h1{font-size:32px}.gt-detail{grid-column:1/-1;margin-left:32px;grid-template-columns:1fr}.gt-context,.gt-resolve{grid-column:auto}.gt-trace-grid{grid-template-columns:1fr}.gt-footer{display:block;line-height:1.8}}
 `;
