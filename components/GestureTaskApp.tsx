@@ -457,18 +457,121 @@ function formatDueTime(value: string) {
 }
 
 function AgendaList({ events }: { events: AgendaEvent[] }) {
-  if (!events.length) return <div className="gt-empty"><span>◷</span><b>No hay eventos próximos importados.</b></div>;
+  if (!events.length) return <div className="gt-empty"><span>◷</span><b>No hay eventos próximos con estos filtros.</b></div>;
   return (
     <div className="gt-agenda">
       {events.map((event) => (
-        <a key={event.id} href={event.event_url || "#"} target={event.event_url ? "_blank" : undefined} rel="noreferrer">
-          <time>{new Date(event.starts_at).toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}<b>{new Date(event.starts_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</b></time>
-          <div><strong>{event.title}</strong><span>{event.event_kind === "gesture" ? "Gesto de calendario" : event.event_kind === "financial" ? "Finanzas" : "Google Calendar"}</span></div>
+        <a
+          key={event.id}
+          href={event.event_url || "#"}
+          target={event.event_url ? "_blank" : undefined}
+          rel="noreferrer"
+          style={{ borderLeftColor: event.business_color || "#d7d4cc" }}
+        >
+          <time>
+            {new Date(event.starts_at).toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}
+            <b>{new Date(event.starts_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</b>
+          </time>
+          <div>
+            <strong>{event.title}</strong>
+            <span>
+              <i style={{ background: event.business_color || "#d7d4cc" }} />
+              {event.business_name || event.calendar_name || "Sin negocio"} · {event.event_kind === "gesture" ? "Gesto" : event.event_kind === "financial" ? "Finanzas" : "Calendario"}
+              <em className="gt-priority-tag">{priorityLabel(event.priority || 3)}</em>
+            </span>
+          </div>
           <em>↗</em>
         </a>
       ))}
     </div>
   );
+}
+
+function KanbanBoard({ tasks, events }: { tasks: GestureTask[]; events: AgendaEvent[] }) {
+  const pending = tasks.filter((task) => task.status !== "done" && !task.due_at);
+  const scheduled = tasks.filter((task) => task.status !== "done" && Boolean(task.due_at));
+  const done = tasks.filter((task) => task.status === "done");
+
+  return (
+    <div className="gt-kanban">
+      <KanbanColumn title="Pendientes" count={pending.length}>
+        {pending.map((task) => <TaskCard key={task.id} task={task} />)}
+      </KanbanColumn>
+      <KanbanColumn title="Programados" count={scheduled.length}>
+        {scheduled.map((task) => <TaskCard key={task.id} task={task} />)}
+      </KanbanColumn>
+      <KanbanColumn title="Agenda" count={events.length}>
+        {events.map((event) => <AgendaCard key={event.id} event={event} />)}
+      </KanbanColumn>
+      <KanbanColumn title="Resueltos" count={done.length}>
+        {done.map((task) => <TaskCard key={task.id} task={task} />)}
+      </KanbanColumn>
+    </div>
+  );
+}
+
+function KanbanColumn({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  return (
+    <section className="gt-kanban-column">
+      <header><b>{title}</b><span>{count}</span></header>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+function TaskCard({ task }: { task: GestureTask }) {
+  return (
+    <article className="gt-kanban-card" style={{ borderTopColor: task.business_color || "#d7d4cc" }}>
+      <div className="gt-card-meta">
+        <span><i style={{ background: task.business_color || "#d7d4cc" }} />{task.business_name || "Sin negocio"}</span>
+        <em>{priorityLabel(task.priority)}</em>
+      </div>
+      <b>{task.title}</b>
+      {task.objective ? <p>{task.objective}</p> : null}
+      <footer>
+        <span>{task.due_at ? formatDueTime(task.due_at) : "Sin fecha"}</span>
+        <span>{task.task_kind === "financial_transaction" || task.task_kind === "financial_closure" ? "Finanzas" : task.source_domain === "world" ? "LINK WORLD" : "Control"}</span>
+      </footer>
+    </article>
+  );
+}
+
+function AgendaCard({ event }: { event: AgendaEvent }) {
+  return (
+    <a className="gt-kanban-card gt-calendar-card" href={event.event_url || "#"} target={event.event_url ? "_blank" : undefined} rel="noreferrer" style={{ borderTopColor: event.business_color || "#d7d4cc" }}>
+      <div className="gt-card-meta">
+        <span><i style={{ background: event.business_color || "#d7d4cc" }} />{event.business_name || event.calendar_name || "Sin negocio"}</span>
+        <em>{priorityLabel(event.priority || 3)}</em>
+      </div>
+      <b>{event.title}</b>
+      {event.description ? <p>{event.description.slice(0, 120)}{event.description.length > 120 ? "…" : ""}</p> : null}
+      <footer>
+        <span>{formatDueTime(event.starts_at)}</span>
+        <span>{event.event_kind === "gesture" ? "Gesto" : event.event_kind === "financial" ? "Finanzas" : "Calendar"}</span>
+      </footer>
+    </a>
+  );
+}
+
+function matchesDateFilter(value: string | null | undefined, filter: string) {
+  if (filter === "all") return true;
+  if (!value) return false;
+  const date = new Date(value);
+  const now = new Date();
+  const startToday = new Date(now);
+  startToday.setHours(0, 0, 0, 0);
+  const endToday = new Date(now);
+  endToday.setHours(23, 59, 59, 999);
+  if (filter === "today") return date >= startToday && date <= endToday;
+  const end = new Date(now);
+  end.setDate(end.getDate() + (filter === "7d" ? 7 : 30));
+  return date >= now && date <= end;
+}
+
+function priorityLabel(priority?: number | null) {
+  if (priority === 1) return "Alta";
+  if (priority === 2) return "Media";
+  return "Baja";
 }
 
 function humanize(value: string) {
@@ -493,6 +596,28 @@ function nextWeekAtNine() {
 }
 
 const css = `
+
+.gt-filterbar{display:grid;grid-template-columns:minmax(170px,1.3fr) 1fr 1fr auto;gap:8px;padding:10px 0 8px;border-bottom:1px solid var(--link-soft,#e9e9e4)}
+.gt-filterbar>label,.gt-view-toggle{min-width:0}.gt-filterbar>label>span,.gt-view-toggle>span{display:block;font-size:7px;letter-spacing:.12em;color:#999;margin:0 0 5px 3px}
+.gt-filterbar select{width:100%;height:34px;border:1px solid var(--link-line,#ddd);border-radius:9px;background:var(--link-surface,#fff);color:inherit;padding:0 9px;font-size:9px;outline:none}
+.gt-select-wrap{position:relative}.gt-select-wrap i{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;z-index:1}.gt-select-wrap select{padding-left:23px}
+.gt-view-toggle>div{display:flex;height:34px;border:1px solid var(--link-line,#ddd);border-radius:9px;padding:2px;background:var(--link-surface,#fff)}
+.gt-view-toggle button{border:0;background:transparent;color:#777;border-radius:7px;padding:0 10px;font-size:9px;cursor:pointer}.gt-view-toggle button.on{background:#1f1f1d;color:#fff}
+.gt-business-legend{display:flex;gap:6px;overflow:auto;padding:8px 0 4px;scrollbar-width:none}.gt-business-legend::-webkit-scrollbar{display:none}.gt-business-legend button{flex:none;border:1px solid var(--link-line,#ddd);background:transparent;color:#777;border-radius:999px;padding:5px 8px;font-size:8px;display:flex;align-items:center;gap:6px;cursor:pointer}.gt-business-legend button.on{background:var(--link-surface-2,#ecece8);color:#222}.gt-business-legend i,.gt-agenda span i,.gt-card-meta i{width:7px;height:7px;border-radius:50%;display:inline-block;flex:none}
+.gt-row{border-left:3px solid transparent;padding-left:8px}
+.gt-agenda>a{border-left:3px solid transparent;padding-left:9px}
+.gt-agenda span{display:flex!important;align-items:center;gap:5px}.gt-priority-tag{font-style:normal;border-left:1px solid #ddd;padding-left:6px;color:#999!important;font-size:8px!important}
+.gt-list.kanban-mode{margin-top:14px;overflow-x:auto;padding-bottom:10px}
+.gt-kanban{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:10px;min-width:920px;align-items:start}
+.gt-kanban-column{background:var(--link-surface-2,#efefeb);border:1px solid var(--link-line,#ddd);border-radius:13px;padding:8px;min-height:200px}
+.gt-kanban-column>header{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 9px}.gt-kanban-column>header b{font-size:10px}.gt-kanban-column>header span{font-size:8px;color:#888;background:var(--link-surface,#fff);border-radius:999px;padding:3px 6px}
+.gt-kanban-column>div{display:grid;gap:7px}
+.gt-kanban-card{display:block;border:1px solid #dfdfda;border-top:3px solid #d7d4cc;border-radius:10px;background:var(--link-surface,#fff);padding:10px;color:inherit;text-decoration:none;box-shadow:0 1px 1px rgba(0,0,0,.02)}
+.gt-kanban-card>b{display:block;font-size:11px;line-height:1.35;margin:6px 0}.gt-kanban-card p{margin:0;font-size:8.5px;line-height:1.4;color:#74746f;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.gt-kanban-card footer{display:flex;justify-content:space-between;gap:8px;margin-top:9px;padding-top:7px;border-top:1px solid #ecece7;font-size:7.5px;color:#91918b}
+.gt-card-meta{display:flex;align-items:center;justify-content:space-between;gap:8px}.gt-card-meta span{display:flex;align-items:center;gap:5px;font-size:7.5px;color:#777;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-card-meta em{font-style:normal;font-size:7px;text-transform:uppercase;letter-spacing:.06em;color:#888}
+.gt-calendar-card:hover{transform:translateY(-1px)}
+@media(max-width:760px){.gt-filterbar{grid-template-columns:1fr 1fr}.gt-view-toggle>div{width:100%}.gt-view-toggle button{flex:1}.gt-kanban{grid-template-columns:repeat(4,minmax(250px,1fr));min-width:1040px}}
 .gt-page{min-height:100vh;background:var(--link-bg,#f5f5f2);color:var(--link-text,#1e1e1c);display:grid;grid-template-columns:220px 1fr;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif}
 .gt-nav{position:sticky;top:0;height:100vh;border-right:1px solid var(--link-line,#deded8);background:var(--link-surface,#f9f9f7);padding:22px 12px;display:flex;flex-direction:column}
 .gt-logo{display:flex;align-items:center;gap:10px;padding:2px 7px 28px}.gt-logo>span{width:25px;height:25px;border:1px solid currentColor;border-radius:50%}.gt-logo b{display:block;font-size:10px;letter-spacing:.2em;line-height:1.35}
