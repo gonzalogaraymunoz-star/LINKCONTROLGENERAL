@@ -686,7 +686,7 @@ function money(value: number, currency?: string | null) {
   }
 }
 
-function formatFact(value: unknown) {
+function formatFact(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value)) return value.map((item) => formatFact(item)).join(", ");
