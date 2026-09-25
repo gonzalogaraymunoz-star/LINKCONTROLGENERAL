@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Responsive, WidthProvider } from "react-grid-layout/legacy";
 
 const ResponsiveGrid = WidthProvider(Responsive);
@@ -136,6 +136,15 @@ type GridItem = {
 
 type GridLayouts = Record<string, GridItem[]>;
 
+type ChatGuideState = {
+  x: number;
+  y: number;
+  below: boolean;
+  action: string;
+} | null;
+
+type GuideHandler = (event: ReactMouseEvent<HTMLElement>, action: string) => void;
+
 type DashboardData = {
   ok: boolean;
   generatedAt: string;
@@ -219,6 +228,7 @@ export default function LinkWorldDashboard() {
   } | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [chatGuide, setChatGuide] = useState<ChatGuideState>(null);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/link-world/dashboard", { cache: "no-store" });
@@ -241,6 +251,12 @@ export default function LinkWorldDashboard() {
   useEffect(() => {
     load().catch((reason: Error) => setError(reason.message));
   }, [load]);
+
+  useEffect(() => {
+    if (!chatGuide) return;
+    const timer = window.setTimeout(() => setChatGuide(null), 5200);
+    return () => window.clearTimeout(timer);
+  }, [chatGuide]);
 
   const selectedClient = useMemo(
     () => data?.clients.find((client) => client.id === selectedClientId) || null,
@@ -319,6 +335,15 @@ export default function LinkWorldDashboard() {
 
   function setWidgetView(widget: string, view: string) {
     setWidgetViews((current) => ({ ...current, [widget]: view }));
+  }
+
+  function guideToChat(event: ReactMouseEvent<HTMLElement>, action: string) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const center = rect.left + rect.width / 2;
+    const x = Math.min(window.innerWidth - 150, Math.max(150, center));
+    const below = rect.top < 160;
+    const y = below ? Math.min(window.innerHeight - 120, rect.bottom + 10) : Math.max(110, rect.top - 10);
+    setChatGuide({ x, y, below, action });
   }
 
   if (!data) {
@@ -442,7 +467,7 @@ export default function LinkWorldDashboard() {
         {effectiveVisibleWidgets.includes("attention") ? (
           <div key="attention">
             <Widget title="Necesita atención" eyebrow={String(data.attention.length) + " DEFINICIONES"} editing={editing}>
-              <AttentionList items={data.attention} />
+              <AttentionList items={data.attention} guide={guideToChat} />
             </Widget>
           </div>
         ) : null}
@@ -503,14 +528,16 @@ export default function LinkWorldDashboard() {
         <span>Actualizado {formatDateTime(data.generatedAt)}</span>
       </footer>
 
-      {selectedClient ? <ClientDrawer client={selectedClient} close={() => setSelectedClientId(null)} /> : null}
+      {selectedClient ? <ClientDrawer client={selectedClient} close={() => setSelectedClientId(null)} guide={guideToChat} /> : null}
       {selectedProduct ? (
         <ProductDrawer
           product={selectedProduct}
           link={selectedProductLink}
           close={() => setSelectedProductId(null)}
+          guide={guideToChat}
         />
       ) : null}
+      <ChatGuide guide={chatGuide} close={() => setChatGuide(null)} />
     </main>
   );
 }
@@ -642,15 +669,15 @@ function renderClientCell(client: Client, column: string) {
   }
 }
 
-function AttentionList({ items }: { items: AttentionItem[] }) {
+function AttentionList({ items, guide }: { items: AttentionItem[]; guide: GuideHandler }) {
   if (!items.length) return <Empty text="Nada requiere definición en este momento." />;
   return (
     <div className="lw-attention-list">
       {items.map((item) => (
-        <article key={item.id}>
+        <button className="lw-attention-action" key={item.id} onClick={(event) => guide(event, item.detail)}>
           <span className={"lw-attention-dot " + item.severity} />
-          <div><b>{item.title}</b><p>{item.detail}</p><small>{humanize(item.kind)}</small></div>
-        </article>
+          <div><b>{item.title}</b><p>{item.detail}</p><small>{humanize(item.kind)} · pedir cambio ↗</small></div>
+        </button>
       ))}
     </div>
   );
@@ -853,7 +880,7 @@ function PersonalStrip({ mission, editing }: { mission: PersonalMission; editing
   );
 }
 
-function ClientDrawer({ client, close }: { client: Client; close: () => void }) {
+function ClientDrawer({ client, close, guide }: { client: Client; close: () => void; guide: GuideHandler }) {
   const facts = asRecord(client.owned_facts);
   const profile = asRecord(facts.profile);
   const commercialModel = asRecord(facts.commercial_model);
@@ -978,7 +1005,7 @@ function ClientDrawer({ client, close }: { client: Client; close: () => void }) 
           <SectionTitle title="Qué falta para avanzar" count={pending.length} />
           {pending.length ? (
             <div className="lw-pending-list">
-              {pending.map((item) => <div key={item}><i />{item}</div>)}
+              {pending.map((item) => <button type="button" key={item} onClick={(event) => guide(event, item)}><i />{item}<span>↗</span></button>)}
             </div>
           ) : <div className="lw-all-clear">Sin bloqueos críticos registrados.</div>}
         </section>
@@ -999,7 +1026,7 @@ function ClientDrawer({ client, close }: { client: Client; close: () => void }) 
   );
 }
 
-function ProductDrawer({ product, link, close }: { product: Product; link: Client | null; close: () => void }) {
+function ProductDrawer({ product, link, close, guide }: { product: Product; link: Client | null; close: () => void; guide: GuideHandler }) {
   const facts = asRecord(link?.owned_facts);
   const commercialModel = asRecord(facts.commercial_model);
   const architecture = asRecord(facts.commercial_architecture);
@@ -1084,7 +1111,7 @@ function ProductDrawer({ product, link, close }: { product: Product; link: Clien
           <SectionTitle title="Qué falta para activar" count={pending.length} />
           {pending.length ? (
             <div className="lw-pending-list">
-              {pending.map((item) => <div key={item}><i />{item}</div>)}
+              {pending.map((item) => <button type="button" key={item} onClick={(event) => guide(event, item)}><i />{item}<span>↗</span></button>)}
             </div>
           ) : <div className="lw-all-clear">Producto listo para avanzar.</div>}
           {product.agreement_notes ? <p className="lw-human-note">{product.agreement_notes}</p> : null}
@@ -1101,6 +1128,22 @@ function ProductDrawer({ product, link, close }: { product: Product; link: Clien
         </details>
       </aside>
     </div>
+  );
+}
+
+function ChatGuide({ guide, close }: { guide: ChatGuideState; close: () => void }) {
+  if (!guide) return null;
+  return (
+    <aside
+      className={"lw-chat-guide " + (guide.below ? "below" : "above")}
+      style={{ left: guide.x, top: guide.y }}
+      role="status"
+      aria-live="polite"
+    >
+      <button type="button" onClick={close} aria-label="Cerrar ayuda">×</button>
+      <small>CONTINÚA EN CHATGPT</small>
+      <p>Abre un chat nuevo · pega <strong>@link-world</strong> · solicita “{guide.action}”.</p>
+    </aside>
   );
 }
 
