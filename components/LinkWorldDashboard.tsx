@@ -984,7 +984,7 @@ function CellDrawer({ cell, close, guide }: { cell: Cell; close: () => void; gui
                 type="button"
                 key={organelle.id}
                 style={{ left: x + "%", top: y + "%" }}
-                onClick={(event) => guide(event, organelle.prompt || ("@link-world Revisa " + (cell.business?.name || "esta célula") + " y ayúdame con " + (organelle.nextGesture || "este orgánulo") + "."))}
+                onClick={(event) => guide(event, organelle.prompt || ("@link-world Revisa " + (cell.business?.name || "este negocio") + " y ayúdame con " + (organelle.nextGesture || "esta área") + "."))}
               >
                 <span className="lw-organelle-dot"><i /></span>
                 <b>{businessAreaLabel(organelle)}</b>
