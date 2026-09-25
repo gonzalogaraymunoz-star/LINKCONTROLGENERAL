@@ -140,6 +140,12 @@ type Organelle = {
   resource_name?: string | null;
   truth_role?: string | null;
   status?: string | null;
+  alive?: boolean;
+  actionCount?: number;
+  completion?: number;
+  efficiency?: number;
+  nextGesture?: string;
+  prompt?: string;
   type?: {
     biological_name?: string | null;
     system_name?: string | null;
@@ -164,6 +170,11 @@ type Cell = {
   organelles: Organelle[];
   activeOrganelles: number;
   requiredOrganelles: number;
+  potentialOrganelles?: number;
+  completion?: number;
+  efficiency?: number;
+  healthCalculated?: string;
+  missingRequired?: Array<{ key: string; label: string; prompt: string }>;
 };
 
 type PersonalMission = {
@@ -280,6 +291,7 @@ export default function LinkWorldDashboard() {
   } | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedCellId, setSelectedCellId] = useState<string | null>(null);
   const [chatGuide, setChatGuide] = useState<ChatGuideState>(null);
 
   const load = useCallback(async () => {
@@ -325,6 +337,11 @@ export default function LinkWorldDashboard() {
       ? data?.clients.find((client) => client.id === selectedProduct.client_id) || null
       : null,
     [data?.clients, selectedProduct],
+  );
+
+  const selectedCell = useMemo(
+    () => data?.cells.find((cell) => cell.entity_id === selectedCellId) || null,
+    [data?.cells, selectedCellId],
   );
 
   const effectiveVisibleWidgets = useMemo(() => {
@@ -563,7 +580,7 @@ export default function LinkWorldDashboard() {
               editing={editing}
               viewControl={<ViewControl widget="cell" value={widgetViews.cell || "summary"} setView={setWidgetView} />}
             >
-              <CellsView cells={data.cells} mode={widgetViews.cell || "summary"} />
+              <CellsView cells={data.cells} mode={widgetViews.cell || "summary"} selectCell={setSelectedCellId} />
             </Widget>
           </div>
         ) : null}
@@ -589,6 +606,7 @@ export default function LinkWorldDashboard() {
           guide={guideToChat}
         />
       ) : null}
+      {selectedCell ? <CellDrawer cell={selectedCell} close={() => setSelectedCellId(null)} guide={guideToChat} /> : null}
       <ChatGuide guide={chatGuide} close={() => setChatGuide(null)} />
     </main>
   );
@@ -726,7 +744,7 @@ function AttentionList({ items, guide }: { items: AttentionItem[]; guide: GuideH
   return (
     <div className="lw-attention-list">
       {items.map((item) => (
-        <button className="lw-attention-action" key={item.id} onClick={(event) => guide(event, item.detail)}>
+        <button className="lw-attention-action" key={item.id} onClick={(event) => guide(event, "@link-world Revisa " + item.title + " en su estado actual dentro de LINK WORLD. Quiero resolver: " + item.detail + ". Propón el cambio y no escribas nada hasta que lo apruebe.")}>
           <span className={"lw-attention-dot " + item.severity} />
           <div><b>{item.title}</b><p>{item.detail}</p><small>{humanize(item.kind)} · pedir cambio ↗</small></div>
         </button>
@@ -867,29 +885,28 @@ function ActivityView({ items, mode }: { items: Activity[]; mode: string }) {
   );
 }
 
-function CellsView({ cells, mode }: { cells: Cell[]; mode: string }) {
+function CellsView({ cells, mode, selectCell }: { cells: Cell[]; mode: string; selectCell: (id: string) => void }) {
   if (!cells.length) return <Empty text="Todavía no hay células registradas." />;
 
   if (mode === "organelles") {
     return (
       <div className="lw-cells-organelles">
         {cells.map((cell) => (
-          <section key={cell.entity_id}>
+          <button className="lw-cell-organelles-card" type="button" key={cell.entity_id} onClick={() => selectCell(cell.entity_id)}>
             <div className="lw-cell-title">
-              <div><small>CÉLULA</small><b>{cell.business?.name || cell.entity?.global_id || "Negocio LINK"}</b></div>
-              <span>{cell.activeOrganelles}/{cell.organelles.length}</span>
+              <div><small>CÉLULA VIVA</small><b>{cell.business?.name || cell.entity?.global_id || "Negocio LINK"}</b></div>
+              <span>{cell.completion ?? 0}%</span>
             </div>
-            <div className="lw-organelle-grid">
-              {cell.organelles.map((organelle) => (
-                <article key={organelle.id}>
-                  <div className="lw-organelle-head"><b>{organelle.type?.biological_name || humanize(organelle.organelle_key)}</b><Status value={organelle.status} /></div>
-                  <strong>{organelle.type?.system_name || organelle.resource_name || "—"}</strong>
-                  <p>{organelle.type?.purpose || "Sin propósito documentado."}</p>
-                  <small>{organelle.provider_domain || "core"} · {organelle.truth_role || "—"}{organelle.type?.required_for_cell ? " · requerido" : ""}</small>
-                </article>
-              ))}
+            <div className="lw-organelle-mini-row">
+              {cell.organelles.length ? cell.organelles.slice(0, 8).map((organelle) => (
+                <span key={organelle.id} title={organelle.type?.purpose || ""}>
+                  <i />
+                  {organelle.type?.biological_name || humanize(organelle.organelle_key)}
+                </span>
+              )) : <em>Sin orgánulos con acción todavía</em>}
             </div>
-          </section>
+            <footer>{cell.activeOrganelles} vivos · eficiencia {cell.efficiency ?? 0}% · entrar ↗</footer>
+          </button>
         ))}
       </div>
     );
@@ -898,24 +915,115 @@ function CellsView({ cells, mode }: { cells: Cell[]; mode: string }) {
   return (
     <div className="lw-cell-summary">
       {cells.map((cell) => (
-        <article key={cell.entity_id}>
-          <div className="lw-cell-orbit">
-            <strong>{cell.activeOrganelles}</strong>
-            <small>orgánulos</small>
+        <button className="lw-cell-summary-card" type="button" key={cell.entity_id} onClick={() => selectCell(cell.entity_id)}>
+          <div className="lw-cell-orbit" style={{ background: `conic-gradient(#191816 ${cell.completion ?? 0}%, #e8e4dc 0)` }}>
+            <div>
+              <strong>{cell.completion ?? 0}%</strong>
+              <small>célula</small>
+            </div>
           </div>
           <div className="lw-cell-copy">
             <small>CÉLULA · {cell.entity?.global_id || "LINK"}</small>
             <h4>{cell.business?.name || "Negocio LINK"}</h4>
             <p>{cell.business?.summary || "Célula registrada en el organismo LINK."}</p>
+            <span>{cell.activeOrganelles} orgánulos vivos · entrar ↗</span>
           </div>
           <div className="lw-cell-states">
-            <Detail label="Ciclo" value={humanize(cell.lifecycle_stage)} />
-            <Detail label="Salud" value={humanize(cell.health_status)} />
+            <Detail label="Estado" value={cell.healthCalculated || humanize(cell.lifecycle_stage)} />
+            <Detail label="Eficiencia" value={String(cell.efficiency ?? 0) + "%"} />
             <Detail label="Autonomía" value={cell.autonomy_level === null || cell.autonomy_level === undefined ? "—" : String(cell.autonomy_level)} />
-            <Detail label="Constitución" value={cell.constitution_version || "—"} />
+            <Detail label="Base" value={String(cell.requiredOrganelles) + " funciones"} />
           </div>
-        </article>
+        </button>
       ))}
+    </div>
+  );
+}
+
+function CellDrawer({ cell, close, guide }: { cell: Cell; close: () => void; guide: GuideHandler }) {
+  const living = cell.organelles || [];
+  const missing = cell.missingRequired || [];
+  const completion = cell.completion ?? 0;
+  const efficiency = cell.efficiency ?? 0;
+
+  return (
+    <div className="lw-cell-inside-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+      <section className="lw-cell-inside">
+        <header className="lw-cell-inside-head">
+          <div>
+            <small>INTERIOR DE LA CÉLULA</small>
+            <h2>{cell.business?.name || "Célula LINK"}</h2>
+            <p>Solo aparecen orgánulos con actividad verificable. Las capacidades sin acción todavía no existen visualmente.</p>
+          </div>
+          <button type="button" onClick={close} aria-label="Cerrar célula">×</button>
+        </header>
+
+        <div className="lw-cell-scorebar">
+          <div><strong>{completion}%</strong><span>completitud</span></div>
+          <div><strong>{efficiency}%</strong><span>eficiencia</span></div>
+          <div><strong>{living.length}</strong><span>orgánulos vivos</span></div>
+          <div><strong>{missing.length}</strong><span>funciones base faltantes</span></div>
+        </div>
+
+        <div className="lw-cell-stage">
+          <div className="lw-cell-core" style={{ background: `conic-gradient(#191816 ${completion}%, #ded8cd 0)` }}>
+            <div>
+              <small>NÚCLEO</small>
+              <strong>{cell.business?.name || "LINK"}</strong>
+              <span>{completion}%</span>
+            </div>
+          </div>
+
+          {living.map((organelle, index) => {
+            const angle = (index / Math.max(living.length, 1)) * Math.PI * 2 - Math.PI / 2;
+            const x = 50 + Math.cos(angle) * 39;
+            const y = 50 + Math.sin(angle) * 36;
+            return (
+              <button
+                className="lw-organelle-node"
+                type="button"
+                key={organelle.id}
+                style={{ left: x + "%", top: y + "%" }}
+                onClick={(event) => guide(event, organelle.prompt || ("@link-world Revisa " + (cell.business?.name || "esta célula") + " y ayúdame con " + (organelle.nextGesture || "este orgánulo") + "."))}
+              >
+                <span className="lw-organelle-dot"><i /></span>
+                <b>{organelle.type?.biological_name || humanize(organelle.organelle_key)}</b>
+                <small>{organelle.completion ?? 0}%</small>
+                <aside className="lw-organelle-hover">
+                  <em>{organelle.type?.system_name || organelle.resource_name || "Orgánulo"}</em>
+                  <p>{organelle.type?.purpose || "Sin explicación registrada."}</p>
+                  <div><span>Completitud <b>{organelle.completion ?? 0}%</b></span><span>Eficiencia <b>{organelle.efficiency ?? 0}%</b></span></div>
+                  <small>{organelle.actionCount ?? 0} señal{(organelle.actionCount ?? 0) === 1 ? "" : "es"} real{(organelle.actionCount ?? 0) === 1 ? "" : "es"}</small>
+                  <strong>{organelle.nextGesture || "Revisar orgánulo"} ↗</strong>
+                </aside>
+              </button>
+            );
+          })}
+
+          {!living.length ? (
+            <div className="lw-cell-empty-inside">
+              <strong>La célula todavía no tiene orgánulos vivos.</strong>
+              <span>Una capacidad aparece aquí cuando genera una acción o evidencia real.</span>
+            </div>
+          ) : null}
+        </div>
+
+        <footer className="lw-cell-inside-foot">
+          <div>
+            <small>CÓMO LLEGA A 100%</small>
+            <p>Las funciones obligatorias siempre pesan en el cálculo. Los orgánulos opcionales solo pesan cuando empiezan a vivir.</p>
+          </div>
+          {missing.length ? (
+            <div className="lw-cell-missing">
+              {missing.map((item) => (
+                <button type="button" key={item.key} onClick={(event) => guide(event, item.prompt)}>
+                  + {item.label}
+                </button>
+              ))}
+            </div>
+          ) : <span className="lw-cell-complete-note">Base estructural completa</span>}
+        </footer>
+      </section>
     </div>
   );
 }
@@ -1121,7 +1229,7 @@ function ClientDrawer({ client, close, guide }: { client: Client; close: () => v
           <SectionTitle title="Qué falta para avanzar" count={pending.length} />
           {pending.length ? (
             <div className="lw-pending-list">
-              {pending.map((item) => <button type="button" key={item} onClick={(event) => guide(event, item)}><i />{item}<span>↗</span></button>)}
+              {pending.map((item) => <button type="button" key={item} onClick={(event) => guide(event, "@link-world Revisa " + commercialName + " dentro de " + businessContext + ". Quiero resolver: " + item + ". Usa el estado real registrado y no modifiques nada hasta que lo apruebe.")}><i />{item}<span>↗</span></button>)}
             </div>
           ) : <div className="lw-all-clear">Sin bloqueos críticos registrados.</div>}
         </section>
@@ -1227,7 +1335,7 @@ function ProductDrawer({ product, link, close, guide }: { product: Product; link
           <SectionTitle title="Qué falta para activar" count={pending.length} />
           {pending.length ? (
             <div className="lw-pending-list">
-              {pending.map((item) => <button type="button" key={item} onClick={(event) => guide(event, item)}><i />{item}<span>↗</span></button>)}
+              {pending.map((item) => <button type="button" key={item} onClick={(event) => guide(event, "@link-world Revisa el producto " + product.name + " de " + commercialName + ". Quiero resolver: " + item + ". Usa el estado real de LINK WORLD, propón alternativas y no escribas cambios hasta que los apruebe.")}><i />{item}<span>↗</span></button>)}
             </div>
           ) : <div className="lw-all-clear">Producto listo para avanzar.</div>}
           {product.agreement_notes ? <p className="lw-human-note">{product.agreement_notes}</p> : null}
@@ -1249,6 +1357,12 @@ function ProductDrawer({ product, link, close, guide }: { product: Product; link
 
 function ChatGuide({ guide, close }: { guide: ChatGuideState; close: () => void }) {
   if (!guide) return null;
+  const prompt = guide.action.trim().startsWith("@link-world")
+    ? guide.action.trim()
+    : "@link-world Revisa el estado actual de LINK WORLD. Quiero " + guide.action.toLowerCase() + ". Propón el cambio y no escribas nada hasta que lo apruebe.";
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(prompt); } catch { /* el usuario aún puede copiar manualmente */ }
+  };
   return (
     <aside
       className={"lw-chat-guide " + (guide.below ? "below" : "above")}
@@ -1256,9 +1370,10 @@ function ChatGuide({ guide, close }: { guide: ChatGuideState; close: () => void 
       role="status"
       aria-live="polite"
     >
-      <button type="button" onClick={close} aria-label="Cerrar ayuda">×</button>
-      <small>CONTINÚA EN CHATGPT</small>
-      <p>Abre un chat nuevo · pega <strong>@link-world</strong> · solicita “{guide.action}”.</p>
+      <button className="lw-chat-guide-close" type="button" onClick={close} aria-label="Cerrar ayuda">×</button>
+      <small>GESTO → CHATGPT</small>
+      <p>{prompt}</p>
+      <button className="lw-chat-guide-copy" type="button" onClick={copy}>Copiar prompt</button>
     </aside>
   );
 }
