@@ -483,6 +483,46 @@ function Filter({label,children}:{label:string;children:React.ReactNode}) {
   return <label className={styles.filter}><span>{label}</span>{children}</label>;
 }
 
+
+type ListSortKey = "date" | "business" | "link" | "product" | "type" | "title" | "state" | "priority" | "responsible";
+type ListGroup = "none" | "business" | "date";
+
+type UnifiedListRow =
+  | {
+      kind: "task";
+      id: string;
+      date: string;
+      business: string;
+      businessColor: string;
+      link: string;
+      product: string;
+      type: string;
+      title: string;
+      objective: string;
+      state: string;
+      priority: number;
+      responsible: string;
+      support: string;
+      task: BoardTask;
+    }
+  | {
+      kind: "event";
+      id: string;
+      date: string;
+      business: string;
+      businessColor: string;
+      link: string;
+      product: string;
+      type: string;
+      title: string;
+      objective: string;
+      state: string;
+      priority: number;
+      responsible: string;
+      support: string;
+      event: BoardEvent;
+    };
+
 function ListView({
   tasks, events, openTask, openEvent,
 }: {
@@ -491,35 +531,194 @@ function ListView({
   openTask:(task:BoardTask)=>void;
   openEvent:(event:BoardEvent)=>void;
 }) {
-  const rows=[
-    ...tasks.map((task)=>({kind:"task" as const,date:task.due_at||task.created_at,task})),
-    ...events.map((event)=>({kind:"event" as const,date:event.starts_at,event})),
-  ].sort((a,b)=>new Date(a.date).getTime()-new Date(b.date).getTime());
+  const [sortKey,setSortKey]=useState<ListSortKey>("date");
+  const [sortDirection,setSortDirection]=useState<"asc"|"desc">("asc");
+  const [groupBy,setGroupBy]=useState<ListGroup>("none");
 
-  if (!rows.length) return <Empty text="No hay elementos para estos filtros." />;
+  const rows=useMemo<UnifiedListRow[]>(()=>[
+    ...tasks.map((task)=>({
+      kind:"task" as const,
+      id:task.id,
+      date:task.due_at||task.created_at,
+      business:task.business_name||"Sin negocio",
+      businessColor:task.business_color||"#d7d4cc",
+      link:task.link_name||"—",
+      product:task.product_name||"—",
+      type:taskTypeLabel(task),
+      title:task.title,
+      objective:task.objective||task.recommended_action||"",
+      state:workflowLabel(task.workflow_state),
+      priority:task.priority||3,
+      responsible:task.responsible||"—",
+      support:taskSupportLabel(task),
+      task,
+    })),
+    ...events.map((event)=>({
+      kind:"event" as const,
+      id:event.id,
+      date:event.starts_at,
+      business:event.business_name||event.calendar_name||"Google Calendar",
+      businessColor:event.business_color||"#d7d4cc",
+      link:event.link_name||"—",
+      product:event.product_name||"—",
+      type:eventTypeLabel(event),
+      title:event.title,
+      objective:event.description||"",
+      state:"Agenda",
+      priority:event.priority||3,
+      responsible:"—",
+      support:event.event_url?"Calendar":"—",
+      event,
+    })),
+  ],[tasks,events]);
+
+  const sortedRows=useMemo(()=>{
+    const copy=[...rows];
+    copy.sort((a,b)=>{
+      let comparison=0;
+      if(sortKey==="date") comparison=new Date(a.date).getTime()-new Date(b.date).getTime();
+      else if(sortKey==="priority") comparison=a.priority-b.priority;
+      else {
+        const av=String(a[sortKey]||"").toLocaleLowerCase("es");
+        const bv=String(b[sortKey]||"").toLocaleLowerCase("es");
+        comparison=av.localeCompare(bv,"es",{numeric:true,sensitivity:"base"});
+      }
+      return sortDirection==="asc"?comparison:-comparison;
+    });
+    return copy;
+  },[rows,sortKey,sortDirection]);
+
+  const groups=useMemo(()=>{
+    if(groupBy==="none") return [{key:"all",label:"Todos los ítems",rows:sortedRows}];
+    const map=new Map<string,UnifiedListRow[]>();
+    for(const row of sortedRows){
+      const key=groupBy==="business"
+        ? row.business
+        : new Date(row.date).toLocaleDateString("es-CL",{year:"numeric",month:"long",day:"numeric"});
+      const current=map.get(key)||[];
+      current.push(row);
+      map.set(key,current);
+    }
+    return Array.from(map.entries()).map(([key,items])=>({key,label:key,rows:items}));
+  },[sortedRows,groupBy]);
+
+  function toggleSort(key:ListSortKey){
+    if(sortKey===key) setSortDirection((current)=>current==="asc"?"desc":"asc");
+    else {setSortKey(key);setSortDirection("asc");}
+  }
+
+  if(!rows.length) return <Empty text="No hay elementos para estos filtros." />;
+
   return (
-    <div className={styles.list}>
-      {rows.map((row)=>row.kind==="task" ? (
-        <button key={"t-"+row.task.id} className={styles.listRow} onClick={()=>openTask(row.task)}>
-          <i style={{background:row.task.business_color||"#d7d4cc"}} />
-          <div className={styles.listCopy}><b>{row.task.title}</b><span>{row.task.business_name||"Sin negocio"}{row.task.link_name?" · "+row.task.link_name:""}{row.task.product_name?" · "+row.task.product_name:""}</span></div>
-          <span className={styles.statePill}>{workflowLabel(row.task.workflow_state)}</span>
-          <span className={styles.priorityPill}>P{row.task.priority}</span>
-          <time>{row.task.due_at?formatDateTime(row.task.due_at):"Sin fecha"}</time>
-          <em>›</em>
-        </button>
-      ) : (
-        <button key={"e-"+row.event.id} className={styles.listRow} onClick={()=>openEvent(row.event)}>
-          <i style={{background:row.event.business_color||"#d7d4cc"}} />
-          <div className={styles.listCopy}><b>{row.event.title}</b><span>{row.event.business_name||"Google Calendar"} · Calendario</span></div>
-          <span className={styles.statePill}>Agenda</span>
-          <span className={styles.priorityPill}>P{row.event.priority||3}</span>
-          <time>{formatDateTime(row.event.starts_at)}</time>
-          <em>›</em>
-        </button>
-      ))}
+    <div className={styles.tableShell}>
+      <div className={styles.tableToolbar}>
+        <div>
+          <small>VISTA LISTA</small>
+          <b>{rows.length} ítems</b>
+        </div>
+        <label>
+          <span>Agrupar</span>
+          <select value={groupBy} onChange={(event)=>setGroupBy(event.target.value as ListGroup)}>
+            <option value="none">Sin agrupar</option>
+            <option value="business">Por negocio</option>
+            <option value="date">Por fecha</option>
+          </select>
+        </label>
+      </div>
+
+      <div className={styles.tableScroll}>
+        <div className={styles.tableHeader}>
+          <SortableHead label="Fecha" active={sortKey==="date"} direction={sortDirection} onClick={()=>toggleSort("date")} />
+          <SortableHead label="Negocio" active={sortKey==="business"} direction={sortDirection} onClick={()=>toggleSort("business")} />
+          <SortableHead label="Link" active={sortKey==="link"} direction={sortDirection} onClick={()=>toggleSort("link")} />
+          <SortableHead label="Producto" active={sortKey==="product"} direction={sortDirection} onClick={()=>toggleSort("product")} />
+          <SortableHead label="Tipo" active={sortKey==="type"} direction={sortDirection} onClick={()=>toggleSort("type")} />
+          <SortableHead label="Ítem / objetivo" active={sortKey==="title"} direction={sortDirection} onClick={()=>toggleSort("title")} />
+          <SortableHead label="Estado" active={sortKey==="state"} direction={sortDirection} onClick={()=>toggleSort("state")} />
+          <SortableHead label="Prioridad" active={sortKey==="priority"} direction={sortDirection} onClick={()=>toggleSort("priority")} />
+          <SortableHead label="Responsable" active={sortKey==="responsible"} direction={sortDirection} onClick={()=>toggleSort("responsible")} />
+          <span className={styles.tableHeaderStatic}>Soporte</span>
+          <span className={styles.tableHeaderStatic}>Abrir</span>
+        </div>
+
+        {groups.map((group)=>(
+          <section key={group.key} className={styles.tableGroup}>
+            {groupBy!=="none"?(
+              <header className={styles.tableGroupHeader}>
+                <b>{group.label}</b>
+                <span>{group.rows.length}</span>
+              </header>
+            ):null}
+            {group.rows.map((row)=>(
+              <button
+                key={row.kind+"-"+row.id}
+                className={styles.tableRow}
+                onClick={()=>row.kind==="task"?openTask(row.task):openEvent(row.event)}
+              >
+                <time className={styles.tableDate}>{formatListDate(row.date)}</time>
+                <span className={styles.tableBusiness}><i style={{background:row.businessColor}} />{row.business}</span>
+                <span className={styles.tableCell}>{row.link}</span>
+                <span className={styles.tableCell}>{row.product}</span>
+                <span className={styles.tableType}>{row.type}</span>
+                <span className={styles.tableTitle}><b>{row.title}</b>{row.objective?<small>{row.objective}</small>:null}</span>
+                <span className={styles.tableState}>{row.state}</span>
+                <span className={styles["tablePriority"+row.priority]}>{priorityLabel(row.priority)}</span>
+                <span className={styles.tableCell}>{row.responsible}</span>
+                <span className={styles.tableSupport}>{row.support}</span>
+                <em className={styles.tableOpen}>›</em>
+              </button>
+            ))}
+          </section>
+        ))}
+      </div>
     </div>
   );
+}
+
+function SortableHead({
+  label,active,direction,onClick,
+}: {
+  label:string;active:boolean;direction:"asc"|"desc";onClick:()=>void;
+}) {
+  return (
+    <button className={styles.sortHead+(active?" "+styles.sortHeadActive:"")} onClick={onClick}>
+      {label}<span>{active?(direction==="asc"?"↑":"↓"):"↕"}</span>
+    </button>
+  );
+}
+
+function taskTypeLabel(task:BoardTask){
+  if(task.task_kind==="financial_transaction") return "Finanzas";
+  if(task.task_kind==="financial_closure") return "Cierre";
+  if(task.entity_type==="product") return "Producto";
+  if(task.entity_type==="counterparty"||task.entity_type==="client") return "Link";
+  if(task.entity_type==="business") return "Negocio";
+  return "Gesto";
+}
+
+function eventTypeLabel(event:BoardEvent){
+  if(event.event_kind==="financial") return "Finanzas";
+  if(event.event_kind==="gesture") return "Gesto Calendar";
+  return "Calendario";
+}
+
+function taskSupportLabel(task:BoardTask){
+  const docs=task.documents?.length||0;
+  if(task.task_kind==="financial_transaction"||task.task_kind==="financial_closure"){
+    if(docs) return docs+" doc"+(docs===1?"":"s");
+    return "Sin respaldo";
+  }
+  if(docs) return docs+" doc"+(docs===1?"":"s");
+  if(task.calendar_sync_status==="pending") return "Calendar pendiente";
+  if(task.due_at) return "Programado";
+  return "—";
+}
+
+function formatListDate(value:string){
+  const date=new Date(value);
+  const today=new Date();
+  const same=sameDay(date,today);
+  return (same?"Hoy · ":"")+date.toLocaleString("es-CL",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
 }
 
 function KanbanView({
@@ -786,7 +985,11 @@ function errorText(value:string) {
     financial_document_missing:"Falta el respaldo documental de esta transacción.",
     financial_closure_not_ready:"El cierre financiero todavía tiene pendientes.",
   };
-  return map[value]||value||"No se pudo completar la acción.";
+  if(map[value]) return map[value];
+  if(!value || value==="operational_board_action_failed" || /^[a-z0-9_.-]+$/i.test(value)) {
+    return "No se pudo completar la acción. Revisa los datos e inténtalo nuevamente.";
+  }
+  return "No se pudo completar la acción. "+value;
 }
 function formatDateTime(value:string) {return new Date(value).toLocaleString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});}
 function toLocalInput(value:string) {const d=new Date(value);const pad=(n:number)=>String(n).padStart(2,"0");return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+pad(d.getHours())+":"+pad(d.getMinutes());}
