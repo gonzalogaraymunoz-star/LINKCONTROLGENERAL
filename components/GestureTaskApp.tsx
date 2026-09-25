@@ -29,16 +29,30 @@ type GestureTask = {
   origin_event_type?: string | null;
   created_at: string;
   completed_at?: string | null;
+  schedule_status?: string | null;
+  calendar_sync_status?: string | null;
+};
+
+type AgendaEvent = {
+  id: string;
+  title: string;
+  description?: string | null;
+  starts_at: string;
+  ends_at: string;
+  event_url?: string | null;
+  event_kind?: string | null;
+  business_global_id?: string | null;
 };
 
 type TaskResponse = {
   ok: boolean;
   generatedAt: string;
   tasks: GestureTask[];
-  counts: { open: number; done: number; world: number };
+  agenda: AgendaEvent[];
+  counts: { open: number; scheduled: number; done: number; world: number; agenda: number };
 };
 
-type Filter = "open" | "finance" | "done" | "all";
+type Filter = "open" | "scheduled" | "agenda" | "finance" | "done" | "all";
 
 export default function GestureTaskApp() {
   const [data, setData] = useState<TaskResponse | null>(null);
@@ -65,7 +79,9 @@ export default function GestureTaskApp() {
   const visible = useMemo(() => {
     if (!data) return [];
     return data.tasks.filter((task) => {
-      if (filter === "open" && task.status === "done") return false;
+      if (filter === "open" && (task.status === "done" || Boolean(task.due_at))) return false;
+      if (filter === "scheduled" && (task.status === "done" || !task.due_at)) return false;
+      if (filter === "agenda") return false;
       if (filter === "finance" && !["financial_transaction","financial_closure"].includes(String(task.task_kind || ""))) return false;
       if (filter === "done" && task.status !== "done") return false;
       if (worldOnly && task.source_domain !== "world") return false;
@@ -164,6 +180,12 @@ export default function GestureTaskApp() {
             <button className={filter === "open" ? "on" : ""} onClick={() => setFilter("open")}>
               Pendientes <span>{data?.counts.open || 0}</span>
             </button>
+            <button className={filter === "scheduled" ? "on" : ""} onClick={() => setFilter("scheduled")}>
+              Programados <span>{data?.counts.scheduled || 0}</span>
+            </button>
+            <button className={filter === "agenda" ? "on" : ""} onClick={() => setFilter("agenda")}>
+              Agenda <span>{data?.counts.agenda || 0}</span>
+            </button>
             <button className={filter === "finance" ? "on" : ""} onClick={() => setFilter("finance")}>
               Finanzas <span>{data?.tasks.filter((task) => ["financial_transaction","financial_closure"].includes(String(task.task_kind || "")) && task.status !== "done").length || 0}</span>
             </button>
@@ -181,17 +203,22 @@ export default function GestureTaskApp() {
 
         <section className="gt-list">
           {!data ? <div className="gt-empty">Cargando gestos…</div> : null}
-          {data && !visible.length ? (
-            <div className="gt-empty">
-              <span>✓</span>
-              <b>{filter === "done" ? "Todavía no hay gestos completados." : "No hay gestos pendientes en esta vista."}</b>
-              <p>Cuando LINK WORLD emita un gesto operativo, aparecerá aquí.</p>
-            </div>
-          ) : null}
-
-          {visible.map((task) => (
-            <GestureRow key={task.id} task={task} busy={busy === task.id} act={act} />
-          ))}
+          {filter === "agenda" ? (
+            <AgendaList events={data?.agenda || []} />
+          ) : (
+            <>
+              {data && !visible.length ? (
+                <div className="gt-empty">
+                  <span>✓</span>
+                  <b>{filter === "done" ? "Todavía no hay gestos completados." : filter === "scheduled" ? "No hay gestos programados." : "No hay gestos pendientes en esta vista."}</b>
+                  <p>Cuando LINK WORLD emita o programe un gesto, aparecerá aquí.</p>
+                </div>
+              ) : null}
+              {visible.map((task) => (
+                <GestureRow key={task.id} task={task} busy={busy === task.id} act={act} />
+              ))}
+            </>
+          )}
         </section>
 
         <footer className="gt-footer">
@@ -213,6 +240,8 @@ function GestureRow({
   act: (action: string, id: string, payload?: Record<string, unknown>) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [customDate, setCustomDate] = useState("");
   const done = task.status === "done";
 
   return (
@@ -236,7 +265,7 @@ function GestureRow({
       </button>
 
       <div className="gt-row-meta">
-        {task.financial_state ? <time>{humanize(task.financial_state)}</time> : task.due_at ? <time>{formatDue(task.due_at)}</time> : null}
+        {task.financial_state ? <time>{humanize(task.financial_state)}</time> : task.due_at ? <time className="scheduled">◷ {formatDueTime(task.due_at)}</time> : null}
         <span className={task.source_domain === "world" ? "world" : "control"}>
           {task.source_domain === "world" ? "↓" : "↑"}
         </span>
@@ -269,14 +298,37 @@ function GestureRow({
             {!done ? (
               <>
                 <button className="primary" onClick={() => act("complete", task.id)}>Marcar resuelto</button>
-                <button onClick={() => act("snooze", task.id, { dueAt: tomorrowAtNine() })}>Mañana</button>
-                <button onClick={() => act("snooze", task.id, { dueAt: nextWeekAtNine() })}>Próxima semana</button>
+                <button onClick={() => act("schedule", task.id, { dueAt: tomorrowAtNine() })}>Mañana 09:00</button>
+                <button onClick={() => act("schedule", task.id, { dueAt: nextWeekAtNine() })}>Próxima semana</button>
+                <button onClick={() => setScheduleOpen((current) => !current)}>Elegir fecha…</button>
               </>
             ) : (
               <button onClick={() => act("reopen", task.id)}>Reabrir</button>
             )}
             <button className="danger" onClick={() => act("cancel", task.id)}>Quitar</button>
           </div>
+
+          {scheduleOpen ? (
+            <div className="gt-scheduler">
+              <label>
+                <span>FECHA Y HORA</span>
+                <input type="datetime-local" value={customDate} onChange={(event) => setCustomDate(event.target.value)} />
+              </label>
+              <button
+                disabled={!customDate}
+                onClick={() => customDate && act("schedule", task.id, { dueAt: new Date(customDate).toISOString() })}
+              >
+                Programar gesto
+              </button>
+            </div>
+          ) : null}
+
+          {task.due_at ? (
+            <div className="gt-scheduled-note">
+              Programado para <b>{formatDueTime(task.due_at)}</b>
+              {task.calendar_sync_status === "pending" ? <span> · pendiente de sincronizar con Google Calendar</span> : null}
+            </div>
+          ) : null}
 
           <details className="gt-trace">
             <summary>Trazabilidad técnica</summary>
@@ -297,6 +349,26 @@ function GestureRow({
 function formatDue(value: string) {
   const date = new Date(value);
   return date.toLocaleDateString("es-CL", { day: "numeric", month: "short" });
+}
+
+function formatDueTime(value: string) {
+  const date = new Date(value);
+  return date.toLocaleString("es-CL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function AgendaList({ events }: { events: AgendaEvent[] }) {
+  if (!events.length) return <div className="gt-empty"><span>◷</span><b>No hay eventos próximos importados.</b></div>;
+  return (
+    <div className="gt-agenda">
+      {events.map((event) => (
+        <a key={event.id} href={event.event_url || "#"} target={event.event_url ? "_blank" : undefined} rel="noreferrer">
+          <time>{new Date(event.starts_at).toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}<b>{new Date(event.starts_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</b></time>
+          <div><strong>{event.title}</strong><span>{event.event_kind === "gesture" ? "Gesto de calendario" : event.event_kind === "financial" ? "Finanzas" : "Google Calendar"}</span></div>
+          <em>↗</em>
+        </a>
+      ))}
+    </div>
+  );
 }
 
 function humanize(value: string) {
@@ -336,8 +408,8 @@ const css = `
 .gt-list{margin-top:0}.gt-row{position:relative;display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:9px;align-items:center;min-height:64px;border-bottom:1px solid var(--link-soft,#e9e9e4);padding:7px 4px}.gt-row.done .gt-row-copy b{text-decoration:line-through;color:var(--link-faint,#999)}
 .gt-check{width:21px;height:21px;border:1.4px solid #969a96;border-radius:50%;background:transparent;color:#fff;font-size:11px;cursor:pointer}.gt-row.done .gt-check{background:#5f8f69;border-color:#5f8f69}.gt-check:disabled{opacity:.5}
 .gt-row-copy{border:0;background:transparent;color:inherit;text-align:left;min-width:0;cursor:pointer}.gt-row-copy b{display:block;font-size:13px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-row-copy span{display:block;font-size:9px;color:var(--link-muted,#777);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-row-copy em{display:block;margin-top:5px;font-style:normal;font-size:10px;line-height:1.35;color:var(--link-muted,#666);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gt-row-meta{display:flex;align-items:center;gap:8px}.gt-row-meta time{font-size:9px;color:var(--link-muted,#777)}.gt-row-meta>span{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:10px}.gt-row-meta>span.world{background:#e8efe8;color:#42674a}.gt-row-meta>span.control{background:#ededeb;color:#555}.gt-more{border:0;background:transparent;color:#888;padding:5px;cursor:pointer}
-.gt-detail{grid-column:2/-1;border-left:1px solid var(--link-line,#ddd);margin:4px 0 10px;padding:10px 0 8px 16px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.gt-detail small{display:block;font-size:8px;letter-spacing:.12em;color:var(--link-faint,#999);margin-bottom:5px}.gt-explain{border:1px solid var(--link-soft,#e7e7e2);background:var(--link-surface,#fff);border-radius:10px;padding:11px 12px;min-height:78px}.gt-explain p{margin:0;font-size:10px;line-height:1.5;color:var(--link-muted,#666)}.gt-explain b{display:block;font-size:11px;line-height:1.45;font-weight:600}.gt-context{grid-column:1/-1;min-height:auto;background:var(--link-surface-2,#f1f1ee)}.gt-resolve{grid-column:1/-1;min-height:auto;border-color:#d4d4ce}.gt-detail-actions{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}.gt-detail-actions button{border:1px solid var(--link-line,#ddd);background:var(--link-surface,#fff);color:inherit;border-radius:8px;padding:7px 9px;font-size:9px;cursor:pointer}.gt-detail-actions button.primary{background:var(--link-accent,#1e1e1c);color:var(--link-accent-text,#fff);border-color:var(--link-accent,#1e1e1c)}.gt-detail-actions button.danger{color:#8d5549}.gt-trace{grid-column:1/-1;margin-top:3px;border-top:1px solid var(--link-soft,#e7e7e2);padding-top:8px}.gt-trace summary{cursor:pointer;font-size:8px;letter-spacing:.08em;color:var(--link-faint,#999);list-style:none}.gt-trace summary::-webkit-details-marker{display:none}.gt-trace-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;padding-top:10px}.gt-trace-grid b,.gt-trace-grid code{font-size:9px;font-family:inherit;overflow-wrap:anywhere}
+.gt-row-meta{display:flex;align-items:center;gap:8px}.gt-row-meta time{font-size:9px;color:var(--link-muted,#777)}.gt-row-meta time.scheduled{color:#5c705f;font-weight:600}.gt-row-meta>span{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:10px}.gt-row-meta>span.world{background:#e8efe8;color:#42674a}.gt-row-meta>span.control{background:#ededeb;color:#555}.gt-more{border:0;background:transparent;color:#888;padding:5px;cursor:pointer}
+.gt-detail{grid-column:2/-1;border-left:1px solid var(--link-line,#ddd);margin:4px 0 10px;padding:10px 0 8px 16px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.gt-detail small{display:block;font-size:8px;letter-spacing:.12em;color:var(--link-faint,#999);margin-bottom:5px}.gt-explain{border:1px solid var(--link-soft,#e7e7e2);background:var(--link-surface,#fff);border-radius:10px;padding:11px 12px;min-height:78px}.gt-explain p{margin:0;font-size:10px;line-height:1.5;color:var(--link-muted,#666)}.gt-explain b{display:block;font-size:11px;line-height:1.45;font-weight:600}.gt-context{grid-column:1/-1;min-height:auto;background:var(--link-surface-2,#f1f1ee)}.gt-resolve{grid-column:1/-1;min-height:auto;border-color:#d4d4ce}.gt-detail-actions{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}.gt-detail-actions button{border:1px solid var(--link-line,#ddd);background:var(--link-surface,#fff);color:inherit;border-radius:8px;padding:7px 9px;font-size:9px;cursor:pointer}.gt-detail-actions button.primary{background:var(--link-accent,#1e1e1c);color:var(--link-accent-text,#fff);border-color:var(--link-accent,#1e1e1c)}.gt-detail-actions button.danger{color:#8d5549}.gt-scheduler{grid-column:1/-1;display:flex;align-items:end;gap:8px;padding:9px;border:1px solid var(--link-line,#ddd);border-radius:10px;background:var(--link-surface-2,#f1f1ee)}.gt-scheduler label{flex:1}.gt-scheduler label span{display:block;font-size:8px;letter-spacing:.1em;color:#888;margin-bottom:5px}.gt-scheduler input{width:100%;border:1px solid var(--link-line,#ddd);background:var(--link-surface,#fff);color:inherit;border-radius:8px;padding:8px;font-size:10px}.gt-scheduler button{border:0;border-radius:8px;background:#1e1e1c;color:#fff;padding:9px 11px;font-size:9px}.gt-scheduled-note{grid-column:1/-1;font-size:9px;color:#5d6b60;background:#edf2ed;border-radius:9px;padding:8px 10px}.gt-agenda{display:grid}.gt-agenda>a{display:grid;grid-template-columns:100px 1fr 20px;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid var(--link-soft,#e9e9e4);color:inherit;text-decoration:none}.gt-agenda time{font-size:9px;color:#777;text-transform:capitalize}.gt-agenda time b{display:block;font-size:11px;color:inherit;margin-top:3px}.gt-agenda strong{display:block;font-size:12px}.gt-agenda span{display:block;font-size:9px;color:#888;margin-top:4px}.gt-agenda em{font-style:normal;color:#999}.gt-trace{grid-column:1/-1;margin-top:3px;border-top:1px solid var(--link-soft,#e7e7e2);padding-top:8px}.gt-trace summary{cursor:pointer;font-size:8px;letter-spacing:.08em;color:var(--link-faint,#999);list-style:none}.gt-trace summary::-webkit-details-marker{display:none}.gt-trace-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;padding-top:10px}.gt-trace-grid b,.gt-trace-grid code{font-size:9px;font-family:inherit;overflow-wrap:anywhere}
 .gt-empty{padding:50px 10px;text-align:center;color:var(--link-muted,#777)}.gt-empty span{width:34px;height:34px;border-radius:50%;border:1px solid var(--link-line,#ddd);display:grid;place-items:center;margin:0 auto 12px}.gt-empty b{display:block;font-size:12px}.gt-empty p{font-size:10px;margin:5px 0}
 .gt-error{margin:10px 0;border:1px solid #e4c9c3;background:#f4e8e5;color:#7b4c42;border-radius:10px;padding:10px 12px;font-size:10px}
 .gt-footer{display:flex;justify-content:space-between;gap:20px;border-top:1px solid var(--link-line,#ddd);margin-top:28px;padding-top:12px;color:var(--link-faint,#999);font-size:8px;letter-spacing:.04em}
