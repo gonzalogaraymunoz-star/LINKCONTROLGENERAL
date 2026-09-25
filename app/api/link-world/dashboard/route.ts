@@ -30,7 +30,7 @@ const VIEW_OPTIONS: Record<string, Set<string>> = {
   clients: new Set(["table", "cards", "compact"]),
   products: new Set(["list", "pipeline", "economy"]),
   activity: new Set(["timeline", "day", "entity"]),
-  cell: new Set(["summary", "areas"]),
+  cell: new Set(["summary", "organelles"]),
 };
 
 const DEFAULT_LAYOUTS = {
@@ -126,7 +126,7 @@ export async function GET() {
     entitiesResult,
     cellsResult,
     bindingsResult,
-    areaTypesResult,
+    organelleTypesResult,
     personalWorkResult,
     dailyProgressResult,
     documentSpacesResult,
@@ -165,11 +165,11 @@ export async function GET() {
       .eq("entity_type", "business"),
     supabase.from("ecosystem_cells")
       .select("entity_id,lifecycle_stage,health_status,autonomy_level,constitution_version,last_gesture_code,metadata,created_at,updated_at"),
-    supabase.from("ecosystem_cell_area_bindings")
-      .select("id,cell_entity_id,area_key,provider_domain,resource_kind,resource_name,binding_key,truth_role,status,configuration,updated_at")
-      .order("area_key"),
-    supabase.from("ecosystem_area_types")
-      .select("area_key,biological_name,system_name,purpose,required_for_cell,sort_order")
+    supabase.from("ecosystem_cell_organelle_bindings")
+      .select("id,cell_entity_id,organelle_key,provider_domain,resource_kind,resource_name,binding_key,truth_role,status,configuration,updated_at")
+      .order("organelle_key"),
+    supabase.from("ecosystem_organelle_types")
+      .select("organelle_key,biological_name,system_name,purpose,required_for_cell,sort_order")
       .order("sort_order"),
     supabase.from("client_gestures")
       .select("id,title,status,starts_at,scope,is_money")
@@ -222,7 +222,7 @@ export async function GET() {
     entitiesResult.error,
     cellsResult.error,
     bindingsResult.error,
-    areaTypesResult.error,
+    organelleTypesResult.error,
     personalWorkResult.error,
     dailyProgressResult.error,
     documentSpacesResult.error,
@@ -289,11 +289,11 @@ export async function GET() {
     recentDocuments: client.business_id ? (documentsByBusiness.get(client.business_id) ?? []).slice(0, 8) : [],
   }));
 
-  const areaTypeByKey = new Map((areaTypesResult.data ?? []).map((row) => [row.area_key, row]));
+  const organelleTypeByKey = new Map((organelleTypesResult.data ?? []).map((row) => [row.organelle_key, row]));
   const entityById = new Map((entitiesResult.data ?? []).map((row) => [row.id, row]));
   const bindings = (bindingsResult.data ?? []).map((binding) => ({
     ...binding,
-    type: areaTypeByKey.get(binding.area_key) ?? null,
+    type: organelleTypeByKey.get(binding.organelle_key) ?? null,
   }));
 
   const clamp = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
@@ -310,7 +310,7 @@ export async function GET() {
         ...cell,
         entity,
         business,
-        areas: [],
+        organelles: [],
         activeOrganelles: 0,
         requiredOrganelles: allOrganelles.filter((item) => item.type?.required_for_cell).length,
         completion: 0,
@@ -346,7 +346,7 @@ export async function GET() {
       const prompts: Record<string, string> = {
         nucleus: base + "Quiero " + next.toLowerCase() + ". Completa solo lo que falte, separa hechos de propuestas y no escribas cambios hasta que los apruebe.",
         membrane: base + "Quiero definir los límites, permisos y respaldos que debe tener este negocio. Propón la configuración mínima y no la registres hasta que la apruebe.",
-        receptors: base + "Quiero conectar una entrada o integración real a el negocio. Revisa qué existe primero y propón el siguiente conector sin inventar conexiones.",
+        receptors: base + "Quiero conectar una entrada o integración real al negocio. Revisa qué existe primero y propón el siguiente conector sin inventar conexiones.",
         cytoskeleton: base + "Quiero ordenar sus relaciones reales con Links, productos y otras células. Revisa el grafo actual y propón el siguiente vínculo útil.",
         mitochondria: base + "Quiero revisar su economía y energía: precios, costos, márgenes y viabilidad de los productos existentes. Usa los datos reales y señala lo pendiente.",
         ribosome: base + "Quiero revisar lo que este negocio está produciendo o construyendo. Usa los proyectos reales y propón el siguiente avance.",
@@ -361,13 +361,13 @@ export async function GET() {
     };
 
     const scoreOrganelle = (binding: any) => {
-      const key = String(binding.area_key || "");
+      const key = String(binding.organelle_key || "");
       const label = binding.type?.biological_name || binding.type?.system_name || key;
-      const taggedGestures = gestures.filter((gesture) => String(asRecord(gesture.metadata).area_key || "") === key);
+      const taggedGestures = gestures.filter((gesture) => String(asRecord(gesture.metadata).organelle_key || "") === key);
       let actionCount = taggedGestures.length;
       let completion = 0;
       let efficiency = 0;
-      let nextGesture = "Revisar este área";
+      let nextGesture = "Revisar esta área";
 
       if (key === "nucleus") {
         actionCount += 1;
@@ -500,16 +500,16 @@ export async function GET() {
     const missingRequired = required
       .filter((item) => !item.alive)
       .map((item) => ({
-        key: item.area_key,
-        label: item.type?.system_name || item.type?.biological_name || item.area_key,
-        prompt: promptFor(item.area_key, item.type?.biological_name || item.area_key, item.nextGesture),
+        key: item.organelle_key,
+        label: item.type?.system_name || item.type?.biological_name || item.organelle_key,
+        prompt: promptFor(item.organelle_key, item.type?.biological_name || item.organelle_key, item.nextGesture),
       }));
 
     return {
       ...cell,
       entity,
       business,
-      areas: liveOrganelles,
+      organelles: liveOrganelles,
       potentialOrganelles: allOrganelles.length,
       activeOrganelles: liveOrganelles.length,
       requiredOrganelles: required.length,
@@ -601,7 +601,7 @@ export async function GET() {
         kind: "cell",
         severity: "low",
         title: cell.business?.name || cell.entity?.global_id || "Célula LINK",
-        detail: "Salud de el negocio aún no evaluada",
+        detail: "Salud de la célula aún no evaluada",
         targetId: cell.entity_id,
       });
     }
