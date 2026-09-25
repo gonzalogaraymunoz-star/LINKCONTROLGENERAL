@@ -235,7 +235,7 @@ const WIDGETS = [
   { id: "attention", label: "Necesita atención", description: "Definiciones que impiden avanzar" },
   { id: "products", label: "Productos", description: "Oferta, etapa y economía" },
   { id: "activity", label: "Actividad LINK WORLD", description: "Qué cambió y dónde" },
-  { id: "cell", label: "Célula", description: "Estado orgánico del negocio" },
+  { id: "cell", label: "Negocios", description: "Estado y áreas activas de cada negocio" },
   { id: "personal", label: "Misión personal", description: "Resumen mínimo de tu día" },
 ];
 
@@ -270,7 +270,7 @@ const VIEW_OPTIONS: Record<string, Array<{ id: string; label: string }>> = {
   ],
   cell: [
     { id: "summary", label: "Resumen" },
-    { id: "organelles", label: "Orgánulos" },
+    { id: "organelles", label: "Áreas" },
   ],
 };
 
@@ -575,8 +575,8 @@ export default function LinkWorldDashboard() {
         {effectiveVisibleWidgets.includes("cell") ? (
           <div key="cell">
             <Widget
-              title="Célula"
-              eyebrow={String(data.cells.length) + " NEGOCIO ORGÁNICO"}
+              title="Negocios"
+              eyebrow={String(data.cells.length) + " EN LINK WORLD"}
               editing={editing}
               viewControl={<ViewControl widget="cell" value={widgetViews.cell || "summary"} setView={setWidgetView} />}
             >
@@ -886,7 +886,7 @@ function ActivityView({ items, mode }: { items: Activity[]; mode: string }) {
 }
 
 function CellsView({ cells, mode, selectCell }: { cells: Cell[]; mode: string; selectCell: (id: string) => void }) {
-  if (!cells.length) return <Empty text="Todavía no hay células registradas." />;
+  if (!cells.length) return <Empty text="Todavía no hay negocios registrados." />;
 
   if (mode === "organelles") {
     return (
@@ -894,18 +894,18 @@ function CellsView({ cells, mode, selectCell }: { cells: Cell[]; mode: string; s
         {cells.map((cell) => (
           <button className="lw-cell-organelles-card" type="button" key={cell.entity_id} onClick={() => selectCell(cell.entity_id)}>
             <div className="lw-cell-title">
-              <div><small>CÉLULA VIVA</small><b>{cell.business?.name || cell.entity?.global_id || "Negocio LINK"}</b></div>
+              <div><small>NEGOCIO</small><b>{cell.business?.name || cell.entity?.global_id || "Negocio LINK"}</b></div>
               <span>{cell.completion ?? 0}%</span>
             </div>
             <div className="lw-organelle-mini-row">
               {cell.organelles.length ? cell.organelles.slice(0, 8).map((organelle) => (
                 <span key={organelle.id} title={organelle.type?.purpose || ""}>
                   <i />
-                  {organelle.type?.biological_name || humanize(organelle.organelle_key)}
+                  {businessAreaLabel(organelle)}
                 </span>
-              )) : <em>Sin orgánulos con acción todavía</em>}
+              )) : <em>Sin áreas activas todavía</em>}
             </div>
-            <footer>{cell.activeOrganelles} vivos · eficiencia {cell.efficiency ?? 0}% · entrar ↗</footer>
+            <footer>{cell.activeOrganelles} áreas activas · eficiencia {cell.efficiency ?? 0}% · abrir ↗</footer>
           </button>
         ))}
       </div>
@@ -919,14 +919,14 @@ function CellsView({ cells, mode, selectCell }: { cells: Cell[]; mode: string; s
           <div className="lw-cell-orbit" style={{ background: `conic-gradient(#191816 ${cell.completion ?? 0}%, #e8e4dc 0)` }}>
             <div>
               <strong>{cell.completion ?? 0}%</strong>
-              <small>célula</small>
+              <small>negocio</small>
             </div>
           </div>
           <div className="lw-cell-copy">
-            <small>CÉLULA · {cell.entity?.global_id || "LINK"}</small>
+            <small>NEGOCIO · {cell.entity?.global_id || "LINK"}</small>
             <h4>{cell.business?.name || "Negocio LINK"}</h4>
-            <p>{cell.business?.summary || "Célula registrada en el organismo LINK."}</p>
-            <span>{cell.activeOrganelles} orgánulos vivos · entrar ↗</span>
+            <p>{cell.business?.summary || "Negocio registrado en LINK WORLD."}</p>
+            <span>{cell.activeOrganelles} áreas activas · abrir ↗</span>
           </div>
           <div className="lw-cell-states">
             <Detail label="Estado" value={cell.healthCalculated || humanize(cell.lifecycle_stage)} />
@@ -951,24 +951,24 @@ function CellDrawer({ cell, close, guide }: { cell: Cell; close: () => void; gui
       <section className="lw-cell-inside">
         <header className="lw-cell-inside-head">
           <div>
-            <small>INTERIOR DE LA CÉLULA</small>
-            <h2>{cell.business?.name || "Célula LINK"}</h2>
-            <p>Solo aparecen orgánulos con actividad verificable. Las capacidades sin acción todavía no existen visualmente.</p>
+            <small>ESTADO DEL NEGOCIO</small>
+            <h2>{cell.business?.name || "Negocio LINK"}</h2>
+            <p>Solo aparecen áreas con actividad o evidencia verificable. Si no existe una acción real, no se muestra.</p>
           </div>
-          <button type="button" onClick={close} aria-label="Cerrar célula">×</button>
+          <button type="button" onClick={close} aria-label="Cerrar negocio">×</button>
         </header>
 
         <div className="lw-cell-scorebar">
           <div><strong>{completion}%</strong><span>completitud</span></div>
           <div><strong>{efficiency}%</strong><span>eficiencia</span></div>
-          <div><strong>{living.length}</strong><span>orgánulos vivos</span></div>
+          <div><strong>{living.length}</strong><span>áreas activas</span></div>
           <div><strong>{missing.length}</strong><span>funciones base faltantes</span></div>
         </div>
 
         <div className="lw-cell-stage">
           <div className="lw-cell-core" style={{ background: `conic-gradient(#191816 ${completion}%, #ded8cd 0)` }}>
             <div>
-              <small>NÚCLEO</small>
+              <small>NEGOCIO</small>
               <strong>{cell.business?.name || "LINK"}</strong>
               <span>{completion}%</span>
             </div>
@@ -987,14 +987,14 @@ function CellDrawer({ cell, close, guide }: { cell: Cell; close: () => void; gui
                 onClick={(event) => guide(event, organelle.prompt || ("@link-world Revisa " + (cell.business?.name || "esta célula") + " y ayúdame con " + (organelle.nextGesture || "este orgánulo") + "."))}
               >
                 <span className="lw-organelle-dot"><i /></span>
-                <b>{organelle.type?.biological_name || humanize(organelle.organelle_key)}</b>
+                <b>{businessAreaLabel(organelle)}</b>
                 <small>{organelle.completion ?? 0}%</small>
                 <aside className="lw-organelle-hover">
-                  <em>{organelle.type?.system_name || organelle.resource_name || "Orgánulo"}</em>
+                  <em>{businessAreaLabel(organelle)}</em>
                   <p>{organelle.type?.purpose || "Sin explicación registrada."}</p>
                   <div><span>Completitud <b>{organelle.completion ?? 0}%</b></span><span>Eficiencia <b>{organelle.efficiency ?? 0}%</b></span></div>
                   <small>{organelle.actionCount ?? 0} señal{(organelle.actionCount ?? 0) === 1 ? "" : "es"} real{(organelle.actionCount ?? 0) === 1 ? "" : "es"}</small>
-                  <strong>{organelle.nextGesture || "Revisar orgánulo"} ↗</strong>
+                  <strong>{organelle.nextGesture || "Revisar área"} ↗</strong>
                 </aside>
               </button>
             );
@@ -1002,8 +1002,8 @@ function CellDrawer({ cell, close, guide }: { cell: Cell; close: () => void; gui
 
           {!living.length ? (
             <div className="lw-cell-empty-inside">
-              <strong>La célula todavía no tiene orgánulos vivos.</strong>
-              <span>Una capacidad aparece aquí cuando genera una acción o evidencia real.</span>
+              <strong>Este negocio todavía no tiene áreas activas.</strong>
+              <span>Un área aparece cuando genera una acción o evidencia real.</span>
             </div>
           ) : null}
         </div>
@@ -1011,7 +1011,7 @@ function CellDrawer({ cell, close, guide }: { cell: Cell; close: () => void; gui
         <footer className="lw-cell-inside-foot">
           <div>
             <small>CÓMO LLEGA A 100%</small>
-            <p>Las funciones obligatorias siempre pesan en el cálculo. Los orgánulos opcionales solo pesan cuando empiezan a vivir.</p>
+            <p>Las funciones base siempre pesan en el cálculo. Las áreas opcionales solo cuentan cuando tienen actividad real.</p>
           </div>
           {missing.length ? (
             <div className="lw-cell-missing">
@@ -1026,6 +1026,24 @@ function CellDrawer({ cell, close, guide }: { cell: Cell; close: () => void; gui
       </section>
     </div>
   );
+}
+
+function businessAreaLabel(organelle: Organelle) {
+  const labels: Record<string, string> = {
+    nucleus: "Identidad y gobierno",
+    membrane: "Límites y permisos",
+    receptors: "Integraciones",
+    cytoskeleton: "Relaciones y estructura",
+    mitochondria: "Economía",
+    ribosome: "Producción",
+    reticulum: "Operación",
+    golgi: "Comercialización",
+    memory: "Evidencia y respaldo",
+    intelligence: "Investigación",
+    signaling: "Eventos",
+    transport: "Automatización",
+  };
+  return labels[organelle.organelle_key] || organelle.type?.system_name || humanize(organelle.organelle_key);
 }
 
 function PersonalStrip({ mission, editing }: { mission: PersonalMission; editing: boolean }) {
