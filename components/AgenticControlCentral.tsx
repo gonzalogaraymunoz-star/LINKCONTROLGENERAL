@@ -572,28 +572,54 @@ function AgentFicha({ agent }: { agent: AgentRecord }) {
 
 function BusinessesPanel({ summary, loading }: { summary: any; loading: boolean }) {
   const clients = summary?.clients || [];
+  const worldBusinesses = (summary?.world?.nodes || []).filter((node: any) => node.entity_type === "business");
   return (
     <section className="panel-stack">
-      <PageIntro eyebrow="CÉLULAS" title="Negocios y clientes" text="Cada ficha conserva su estado operacional real." />
-      <div className="business-grid">
-        {clients.map((client: any) => (
-          <article className="business-card" key={client.id}>
-            <div className="business-card-head">
-              <span className="business-avatar" style={{ borderColor: client.accent || undefined }}>{String(client.name || "?").slice(0, 2).toUpperCase()}</span>
-              <span className="state-pill">{client.status || "active"}</span>
-            </div>
-            <h3>{client.name}</h3>
-            <p>{client.strategy?.objective || client.strategy?.approach || "Sin objetivo estratégico registrado."}</p>
-            <div className="business-facts">
-              <span><small>Etapa</small><b>{client.stage || "—"}</b></span>
-              <span><small>Plan</small><b>{client.plan || "—"}</b></span>
-              <span><small>Trabajo</small><b>{client.gestureCount || 0}</b></span>
-            </div>
-            <small className="last-line">Próximo: {when(client.nextGestureAt)}</small>
-          </article>
-        ))}
-        {!clients.length && !loading && <Empty text="No hay negocios/clientes activos." />}
-      </div>
+      <PageIntro eyebrow="CÉLULAS" title="Negocios y clientes" text="CONTROL CENTRAL y LINK WORLD leen el mismo grafo vivo; no duplicamos la realidad." />
+      <section className="surface">
+        <SectionHead eyebrow="LINK WORLD" title="Células del organismo" note="Fuente canónica: link_world_businesses + ecosystem_entities." />
+        <div className="business-grid">
+          {worldBusinesses.map((business: any) => (
+            <article className="business-card" key={business.global_id}>
+              <div className="business-card-head">
+                <span className="business-avatar">{String(business.label || "?").slice(0, 2).toUpperCase()}</span>
+                <span className="state-pill">{business.verification_status || business.status || "active"}</span>
+              </div>
+              <h3>{business.label}</h3>
+              <p>{business.slug || business.global_id}</p>
+              <div className="business-facts">
+                <span><small>Dominio</small><b>{business.owner_domain}</b></span>
+                <span><small>Tipo</small><b>{business.entity_type}</b></span>
+                <span><small>Estado</small><b>{business.status}</b></span>
+              </div>
+              <small className="last-line">{business.global_id}</small>
+            </article>
+          ))}
+          {!worldBusinesses.length && !loading && <Empty text="LINK WORLD no reportó negocios al grafo compartido." />}
+        </div>
+      </section>
+      <section className="surface">
+        <SectionHead eyebrow="CONTROL CENTRAL" title="Clientes operacionales" note="CRM y trabajo propio de CONTROL CENTRAL." />
+        <div className="business-grid">
+          {clients.map((client: any) => (
+            <article className="business-card" key={client.id}>
+              <div className="business-card-head">
+                <span className="business-avatar" style={{ borderColor: client.accent || undefined }}>{String(client.name || "?").slice(0, 2).toUpperCase()}</span>
+                <span className="state-pill">{client.status || "active"}</span>
+              </div>
+              <h3>{client.name}</h3>
+              <p>{client.strategy?.objective || client.strategy?.approach || "Sin objetivo estratégico registrado."}</p>
+              <div className="business-facts">
+                <span><small>Etapa</small><b>{client.stage || "—"}</b></span>
+                <span><small>Plan</small><b>{client.plan || "—"}</b></span>
+                <span><small>Trabajo</small><b>{client.gestureCount || 0}</b></span>
+              </div>
+              <small className="last-line">Próximo: {when(client.nextGestureAt)}</small>
+            </article>
+          ))}
+          {!clients.length && !loading && <Empty text="No hay clientes operacionales activos." />}
+        </div>
+      </section>
     </section>
   );
 }
