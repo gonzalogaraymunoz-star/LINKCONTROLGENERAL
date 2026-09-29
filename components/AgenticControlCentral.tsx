@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AgentActionConsole from "@/components/AgentActionConsole";
 
 export type AgentCapability = {
   capability_key: string;
@@ -306,7 +307,7 @@ export default function AgenticControlCentral({
             }} />
           )}
           {section === "Agentes" && (
-            <AgentsPanel agents={initialAgents} agent={agent} select={setSelectedAgent} />
+            <AgentsPanel agents={initialAgents} agent={agent} select={setSelectedAgent} summary={summary} />
           )}
           {section === "Negocios" && <BusinessesPanel summary={summary} loading={loading} />}
           {section === "Trabajo" && <WorkPanel summary={summary} loading={loading} />}
@@ -414,10 +415,12 @@ function AgentsPanel({
   agents,
   agent,
   select,
+  summary,
 }: {
   agents: AgentRecord[];
   agent: AgentRecord | null;
   select: (id: string) => void;
+  summary: any;
 }) {
   if (!agents.length) return <EmptyPage title="Agentes" text="No hay agentes reales registrados todavía." />;
 
@@ -437,12 +440,12 @@ function AgentsPanel({
           </button>
         ))}
       </aside>
-      {agent ? <AgentFicha agent={agent} /> : null}
+      {agent ? <AgentFicha agent={agent} summary={summary} /> : null}
     </section>
   );
 }
 
-function AgentFicha({ agent }: { agent: AgentRecord }) {
+function AgentFicha({ agent, summary }: { agent: AgentRecord; summary: any }) {
   const runtime = agent.runtimeState;
   const latest = agent.activity[0];
   const inputTokens = agent.activity.reduce((sum, item) => sum + Number(item.input_tokens || 0), 0);
@@ -547,6 +550,13 @@ function AgentFicha({ agent }: { agent: AgentRecord }) {
             {!agent.memories.length && <Empty text="No hay memorias persistentes visibles." />}
           </div>
         </section>
+
+        <AgentActionConsole
+          agentSlug={agent.slug}
+          agentName={agent.name}
+          stageKey={agent.metadata?.stage_key || null}
+          businesses={(summary?.world?.nodes || []).filter((node: any) => node.entity_type === "business")}
+        />
 
         <section className="surface">
           <SectionHead eyebrow="ACTIVIDAD" title="Qué ha hecho" note="Intervenciones registradas del agente." />
