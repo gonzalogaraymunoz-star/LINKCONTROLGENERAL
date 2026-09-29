@@ -422,43 +422,202 @@ function AgentsPanel({
   select: (id: string) => void;
   summary: any;
 }) {
+  const [mode, setMode] = useState<"production" | "agent">("production");
   if (!agents.length) return <EmptyPage title="Agentes" text="No hay agentes reales registrados todavía." />;
 
   return (
-    <section className="agents-layout">
-      <aside className="agent-index surface">
-        <SectionHead eyebrow="AGENTES" title="Equipo LINK" note="Cada agente tiene misión y límites propios." />
-        {agents.map((item) => (
-          <button
-            key={item.id}
-            className={"agent-index-row" + (agent?.id === item.id ? " is-active" : "")}
-            onClick={() => select(item.id)}
-          >
-            <span className="agent-avatar small">{item.name.slice(0, 2).toUpperCase()}</span>
-            <span><b>{item.name}</b><small>{humanStatus(item.runtimeState?.mode || item.metadata?.autonomy_mode)}</small></span>
-            <span className="live-dot" />
-          </button>
-        ))}
-      </aside>
-      {agent ? <AgentFicha agent={agent} summary={summary} /> : null}
+    <section className="panel-stack">
+      <div className="agent-view-switch">
+        <button className={mode === "production" ? "is-active" : ""} onClick={() => setMode("production")}>
+          Producción
+        </button>
+        <button className={mode === "agent" ? "is-active" : ""} onClick={() => setMode("agent")}>
+          Ficha del agente
+        </button>
+        <a href="https://link-world-delta.vercel.app/?space=micelio&view=processes" target="_blank" rel="noopener noreferrer">
+          Ver Micelio ↗
+        </a>
+      </div>
+
+      {mode === "production" ? (
+        <AgentProductionBoard agents={agents} summary={summary} selectAgent={(id) => { select(id); setMode("agent"); }} />
+      ) : (
+        <section className="agents-layout">
+          <aside className="agent-index surface">
+            <SectionHead eyebrow="AGENTES" title="Equipo LINK" note="Selecciona un agente para revisar su mesa de trabajo." />
+            {agents.map((item) => (
+              <button
+                key={item.id}
+                className={"agent-index-row" + (agent?.id === item.id ? " is-active" : "")}
+                onClick={() => select(item.id)}
+              >
+                <span className="agent-avatar small">{item.name.slice(0, 2).toUpperCase()}</span>
+                <span><b>{item.name}</b><small>{humanStatus(item.runtimeState?.mode || item.metadata?.autonomy_mode)}</small></span>
+                <span className="live-dot" />
+              </button>
+            ))}
+          </aside>
+          {agent ? <AgentFicha agent={agent} summary={summary} /> : null}
+        </section>
+      )}
     </section>
+  );
+}
+
+function trendLabel(value: string) {
+  if (value === "improving") return "Mejorando";
+  if (value === "declining") return "Empeorando";
+  if (value === "flat") return "Sin cambio";
+  if (value === "measured") return "Medido";
+  return "Sin medición";
+}
+
+function parameterValue(observation: any) {
+  if (!observation) return "—";
+  if (observation.value_numeric != null) return String(observation.value_numeric);
+  return observation.value_text || "—";
+}
+
+function AgentProductionBoard({
+  agents,
+  summary,
+  selectAgent,
+}: {
+  agents: AgentRecord[];
+  summary: any;
+  selectAgent: (id: string) => void;
+}) {
+  const production = summary?.agentProduction || [];
+  const actions = summary?.agentActions || [];
+  const bySlug = new Map(production.map((row: any) => [row.agentSlug, row]));
+  const [copied, setCopied] = useState("");
+
+  async function copyPrompt(slug: string, prompt: string) {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(slug);
+      window.setTimeout(() => setCopied(""), 1600);
+    } catch {
+      setCopied("");
+    }
+  }
+
+  const parameters = production.flatMap((row: any) =>
+    (row.parameters || []).map((parameter: any) => ({ ...parameter, agentSlug: row.agentSlug })),
+  );
+
+  return (
+    <>
+      <section className="surface agent-production-head">
+        <SectionHead
+          eyebrow="PRODUCCIÓN AGÉNTICA"
+          title="Qué está moviendo el organismo"
+          note="Misiones, órdenes, evidencia y parámetros reales. Sin actividad inventada."
+        />
+        <div className="production-kpis">
+          <div><strong>{actions.length}</strong><span>acciones registradas</span></div>
+          <div><strong>{production.reduce((sum: number, row: any) => sum + Number(row.missions?.active || 0), 0)}</strong><span>misiones activas</span></div>
+          <div><strong>{production.reduce((sum: number, row: any) => sum + Number(row.commands?.pendingApproval || 0), 0)}</strong><span>esperan aprobación</span></div>
+          <div><strong>{parameters.filter((row: any) => row.trend === "improving").length}</strong><span>parámetros mejorando</span></div>
+        </div>
+      </section>
+
+      <section className="surface">
+        <SectionHead eyebrow="DIRECTORES" title="Estado operativo" note="Una fila por agente. La sugerencia siempre termina en un prompt utilizable." />
+        <div className="agent-production-table">
+          <div className="agent-production-row is-head">
+            <span>Agente</span><span>Etapa</span><span>Misión</span><span>Acciones</span><span>Evidencia</span><span>Siguiente movimiento</span>
+          </div>
+          {agents.map((agent) => {
+            const row: any = bySlug.get(agent.slug) || {};
+            const current = row.missions?.current;
+            return (
+              <div className="agent-production-row" key={agent.id}>
+                <button className="production-agent-cell" onClick={() => selectAgent(agent.id)}>
+                  <span className="agent-avatar small">{agent.name.slice(0, 2).toUpperCase()}</span>
+                  <span><b>{agent.name}</b><small>{humanStatus(agent.runtimeState?.mode || agent.metadata?.autonomy_mode)}</small></span>
+                </button>
+                <span className="production-stage">{row.stageKey || agent.metadata?.stage_key || "transversal"}</span>
+                <span>
+                  <b>{current?.title || "Sin misión activa"}</b>
+                  <small>{current?.mission_code || "Esperando diagnóstico"}</small>
+                </span>
+                <span>
+                  <b>{row.commands?.total || 0}</b>
+                  <small>{row.commands?.pendingApproval || 0} por aprobar</small>
+                </span>
+                <span>
+                  <b>{row.evidence?.validated || 0}</b>
+                  <small>{row.evidence?.requestedOrReceived || 0} pendiente(s)</small>
+                </span>
+                <span className="production-next">
+                  <b>{row.suggestion || "Observar y medir."}</b>
+                  <button onClick={() => copyPrompt(agent.slug, row.prompt || "")}>
+                    {copied === agent.slug ? "Copiado ✓" : "Copiar prompt"}
+                  </button>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="surface">
+        <SectionHead eyebrow="PARÁMETROS" title="Qué debe mejorar cada Director" note="Solo mostramos tendencia cuando existen observaciones con evidencia." />
+        <div className="parameter-table">
+          <div className="parameter-row is-head">
+            <span>Director</span><span>Parámetro</span><span>Anterior</span><span>Actual</span><span>Tendencia</span><span>Última señal</span>
+          </div>
+          {parameters.map((parameter: any) => (
+            <div className="parameter-row" key={parameter.id}>
+              <span><b>{agents.find((item) => item.slug === parameter.agentSlug)?.name || parameter.agentSlug}</b><small>{parameter.stage_key}</small></span>
+              <span><b>{parameter.label}</b><small>{parameter.direction === "down" ? "mejora al bajar" : "mejora al subir"}</small></span>
+              <span>{parameterValue(parameter.previous)}</span>
+              <span>{parameterValue(parameter.latest)}</span>
+              <span><i className={"trend-dot is-" + parameter.trend} />{trendLabel(parameter.trend)}</span>
+              <span>{parameter.latest?.observed_at ? when(parameter.latest.observed_at) : "Esperando señal"}</span>
+            </div>
+          ))}
+          {!parameters.length && <Empty text="Todavía no hay parámetros registrados." />}
+        </div>
+      </section>
+
+      <section className="surface">
+        <SectionHead eyebrow="ACCIONES" title="Todo lo que han ordenado" note="Command bus completo de los agentes, de más reciente a más antiguo." />
+        <div className="action-ledger">
+          <div className="action-ledger-row is-head">
+            <span>Fecha</span><span>Agente</span><span>Acción</span><span>Negocio</span><span>Aprobación</span><span>Resultado</span>
+          </div>
+          {actions.map((action: any) => (
+            <div className="action-ledger-row" key={action.id}>
+              <span>{when(action.requested_at)}</span>
+              <span><b>{agents.find((item) => item.slug === action.actor)?.name || action.actor}</b></span>
+              <span><code>{action.action_key}</code></span>
+              <span>{action.global_id || "Transversal"}</span>
+              <span className="state-pill">{action.approval_status}</span>
+              <span><b>{action.status}</b>{action.error ? <small>{action.error}</small> : null}</span>
+            </div>
+          ))}
+          {!actions.length && <Empty text="Todavía no existen acciones de agentes." />}
+        </div>
+      </section>
+    </>
   );
 }
 
 function AgentFicha({ agent, summary }: { agent: AgentRecord; summary: any }) {
   const runtime = agent.runtimeState;
-  const latest = agent.activity[0];
-  const inputTokens = agent.activity.reduce((sum, item) => sum + Number(item.input_tokens || 0), 0);
-  const outputTokens = agent.activity.reduce((sum, item) => sum + Number(item.output_tokens || 0), 0);
-  const mutationsAllowed = runtime?.mutatingActionsEnabled === true;
+  const production = (summary?.agentProduction || []).find((row: any) => row.agentSlug === agent.slug) || {};
+  const currentMission = production?.missions?.current || null;
+  const parameters = production?.parameters || [];
 
   return (
     <article className="agent-ficha">
-      <header className="agent-ficha-head">
+      <header className="agent-ficha-head is-compact">
         <div className="agent-ficha-identity">
           <span className="agent-avatar hero">{agent.name.slice(0, 2).toUpperCase()}</span>
           <div>
-            <div className="eyebrow">FICHA DE AGENTE · {agent.globalId}</div>
+            <div className="eyebrow">AGENTE · {agent.metadata?.stage_key || "DIRECCIÓN"}</div>
             <h1>{agent.name}</h1>
             <p>{agent.description}</p>
           </div>
@@ -466,96 +625,49 @@ function AgentFicha({ agent, summary }: { agent: AgentRecord; summary: any }) {
         <div className="agent-ficha-state">
           <span><i className="live-dot" />{humanStatus(agent.status)}</span>
           <b>{humanStatus(runtime?.mode || agent.metadata?.autonomy_mode)}</b>
-          <a
-            className="sync-button"
-            href="https://link-world-delta.vercel.app/?space=micelio&view=processes"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a className="sync-button" href="https://link-world-delta.vercel.app/?space=micelio&view=processes" target="_blank" rel="noopener noreferrer">
             Ver en Micelio ↗
           </a>
         </div>
       </header>
 
       <div className="metric-grid agent-metrics">
-        <Metric label="Capacidades" value={agent.capabilities.length} accent />
-        <Metric label="Memorias visibles" value={agent.memories.length} />
-        <Metric label="Intervenciones" value={agent.activity.length} />
-        <Metric label="Mutaciones" value={mutationsAllowed ? "Habilitadas" : "Bloqueadas"} />
+        <Metric label="Misiones activas" value={production?.missions?.active || 0} accent />
+        <Metric label="Acciones emitidas" value={production?.commands?.total || 0} />
+        <Metric label="Por aprobar" value={production?.commands?.pendingApproval || 0} />
+        <Metric label="Evidencias validadas" value={production?.evidence?.validated || 0} />
       </div>
 
       <div className="agent-detail-grid">
-        <section className="surface">
-          <SectionHead eyebrow="MANDATO" title="Qué tiene que cuidar" />
-          <p className="body-copy">
-            Mantener LINK coherente, operativo, conectado y verificable. Antes de crear algo
-            nuevo debe revisar lo que ya existe, respetar protocolos y preferir movimientos
-            reversibles con evidencia.
-          </p>
-          <div className="chip-row">
-            <span>Observar</span><span>Conectar</span><span>Reclutar</span><span>Proponer</span>
+        <section className="surface span-2 current-mission">
+          <SectionHead eyebrow="AHORA" title={currentMission?.title || "Sin misión activa"} note={currentMission?.mission_code || "Esperando una restricción verificable."} />
+          <p className="body-copy">{currentMission?.problem_statement || production?.suggestion || "El agente todavía no tiene trabajo abierto."}</p>
+          <div className="mission-facts">
+            <span><small>Etapa</small><b>{production?.stageKey || agent.metadata?.stage_key || "—"}</b></span>
+            <span><small>Estado</small><b>{currentMission?.status || "observación"}</b></span>
+            <span><small>Evidencia pendiente</small><b>{production?.evidence?.requestedOrReceived || 0}</b></span>
           </div>
         </section>
 
-        <section className="surface">
-          <SectionHead eyebrow="RUNTIME" title="Dónde y cómo trabaja" />
-          <dl className="fact-list">
-            <Fact term="Runtime" value={runtime?.runtime || agent.metadata?.runtime || "—"} />
-            <Fact term="Ruta" value={agent.metadata?.runtime_route || "—"} mono />
-            <Fact term="Inteligencia" value={runtime?.intelligence || agent.metadata?.intelligence || "—"} />
-            <Fact term="Modelo" value={runtime?.model || "No reportado"} mono />
-            <Fact term="Estado vivo" value={runtime?.liveState || agent.metadata?.live_state || "Supabase"} />
-          </dl>
+        <section className="surface span-2 suggestion-card">
+          <SectionHead eyebrow="SIGUIENTE MOVIMIENTO" title={production?.suggestion || "Observar y medir"} note="Prompt listo para continuar conmigo." />
+          <pre>{production?.prompt || "Todavía no existe una sugerencia operativa."}</pre>
+          <button onClick={() => navigator.clipboard.writeText(production?.prompt || "")}>Copiar prompt para ChatGPT</button>
         </section>
 
         <section className="surface span-2">
-          <SectionHead eyebrow="CAPACIDADES" title="Qué sabe hacer" note="Registro real de LINK CONTROL CENTRAL." />
-          <div className="capability-grid">
-            {agent.capabilities.map((capability) => (
-              <div className="capability-card" key={capability.capability_key}>
-                <div><b>{capability.label}</b><code>{capability.capability_key}</code></div>
-                <p>{capability.description || "Sin descripción adicional."}</p>
-                <span>{Math.round(Number(capability.weight || 0) * 100)}%</span>
+          <SectionHead eyebrow="PARÁMETROS" title="Evolución de la etapa" note="No mostramos mejora sin evidencia." />
+          <div className="parameter-table compact">
+            {parameters.map((parameter: any) => (
+              <div className="parameter-row" key={parameter.id}>
+                <span><b>{parameter.label}</b><small>{parameter.direction === "down" ? "mejora al bajar" : "mejora al subir"}</small></span>
+                <span>{parameterValue(parameter.previous)}</span>
+                <span>{parameterValue(parameter.latest)}</span>
+                <span><i className={"trend-dot is-" + parameter.trend} />{trendLabel(parameter.trend)}</span>
+                <span>{parameter.latest?.observed_at ? when(parameter.latest.observed_at) : "Esperando señal"}</span>
               </div>
             ))}
-          </div>
-        </section>
-
-        <section className="surface">
-          <SectionHead eyebrow="GOBIERNO" title="Permisos y límites" />
-          <dl className="fact-list">
-            <Fact term="Autonomía" value={humanStatus(runtime?.mode || agent.metadata?.autonomy_mode)} />
-            <Fact term="Mutaciones" value={mutationsAllowed ? "Permitidas" : "No permitidas"} />
-            <Fact term="Activación" value={agent.activationMode || "—"} />
-            <Fact term="Gobierno" value={agent.governance?.label || "Sin relación de gobierno registrada"} />
-            <Fact term="Versión" value={agent.version || runtime?.version || "—"} />
-          </dl>
-          <p className="boundary-note">
-            El agente puede preparar movimientos; una propuesta, un evento o una conversación no
-            equivalen a ejecución.
-          </p>
-        </section>
-
-        <section className="surface">
-          <SectionHead eyebrow="DOCTRINA" title="De dónde aprende a comportarse" />
-          <dl className="fact-list">
-            <Fact term="Doctrina" value={runtime?.doctrine || agent.metadata?.doctrine_mode || "GitHub"} />
-            <Fact term="Repositorio" value={agent.metadata?.doctrine_repo || "gonzalogaraymunoz-star/link-world"} mono />
-            <Fact term="Commit registrado" value={agent.metadata?.doctrine_commit || "—"} mono />
-            <Fact term="Fuente de verdad" value={agent.metadata?.source_of_truth || "supabase"} />
-          </dl>
-        </section>
-
-        <section className="surface">
-          <SectionHead eyebrow="MEMORIA" title="Qué recuerda" note="Se muestran claves, no contenido sensible." />
-          <div className="memory-list">
-            {agent.memories.map((memory) => (
-              <div className="memory-row" key={memory.memory_key}>
-                <div><b>{memory.memory_key}</b><small>{memory.kind} · importancia {memory.importance ?? "—"}/5</small></div>
-                <span>{when(memory.updated_at)}</span>
-              </div>
-            ))}
-            {!agent.memories.length && <Empty text="No hay memorias persistentes visibles." />}
+            {!parameters.length && <Empty text="Este agente no tiene parámetros de etapa definidos." />}
           </div>
         </section>
 
@@ -566,23 +678,44 @@ function AgentFicha({ agent, summary }: { agent: AgentRecord; summary: any }) {
           businesses={(summary?.world?.nodes || []).filter((node: any) => node.entity_type === "business")}
         />
 
-        <section className="surface">
-          <SectionHead eyebrow="ACTIVIDAD" title="Qué ha hecho" note="Intervenciones registradas del agente." />
-          <div className="activity-summary">
-            <div><b>{agent.activity.length}</b><span>intervenciones leídas</span></div>
-            <div><b>{inputTokens + outputTokens}</b><span>tokens registrados</span></div>
-          </div>
-          <div className="memory-list">
-            {agent.activity.slice(0, 6).map((item) => (
-              <div className="memory-row" key={item.id}>
-                <div><b>{item.event_type || "intervención"}</b><small>{item.model || item.provider || "modelo no reportado"} · {humanStatus(item.status)}</small></div>
-                <span>{when(item.created_at)}</span>
+        <details className="surface span-2 agent-secondary">
+          <summary>Capacidades, memoria y configuración técnica</summary>
+          <div className="secondary-grid">
+            <section>
+              <h3>Capacidades</h3>
+              <div className="capability-grid">
+                {agent.capabilities.map((capability) => (
+                  <div className="capability-card" key={capability.capability_key}>
+                    <div><b>{capability.label}</b><code>{capability.capability_key}</code></div>
+                    <p>{capability.description || "Sin descripción adicional."}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-            {!agent.activity.length && <Empty text="Aún no hay intervenciones registradas para este agente." />}
+            </section>
+            <section>
+              <h3>Gobierno y runtime</h3>
+              <dl className="fact-list">
+                <Fact term="Autonomía" value={humanStatus(runtime?.mode || agent.metadata?.autonomy_mode)} />
+                <Fact term="Runtime" value={runtime?.runtime || agent.metadata?.runtime || "—"} />
+                <Fact term="Activación" value={agent.activationMode || "—"} />
+                <Fact term="Gobierno" value={agent.governance?.label || "Sin relación registrada"} />
+                <Fact term="Versión" value={agent.version || runtime?.version || "—"} />
+              </dl>
+            </section>
+            <section>
+              <h3>Memoria</h3>
+              <div className="memory-list">
+                {agent.memories.map((memory) => (
+                  <div className="memory-row" key={memory.memory_key}>
+                    <div><b>{memory.memory_key}</b><small>{memory.kind} · importancia {memory.importance ?? "—"}/5</small></div>
+                    <span>{when(memory.updated_at)}</span>
+                  </div>
+                ))}
+                {!agent.memories.length && <Empty text="No hay memorias persistentes visibles." />}
+              </div>
+            </section>
           </div>
-          {latest ? <small className="last-line">Última actividad: {when(latest.created_at)}</small> : null}
-        </section>
+        </details>
       </div>
     </article>
   );
