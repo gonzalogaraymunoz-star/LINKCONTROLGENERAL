@@ -147,7 +147,7 @@ export async function wakeAgent(input: WakeInput) {
     businessGlobalId
       ? supabase
           .from("link_world_businesses")
-          .select("global_id,slug,name,status,metadata")
+          .select("global_id,slug,name,sector,city,country,website,summary,owned_facts,evidence,verification_status,public_workspace,updated_at")
           .eq("global_id", businessGlobalId)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
@@ -214,12 +214,14 @@ export async function wakeAgent(input: WakeInput) {
   const parameterIds = (parametersResult.data || []).map((parameter: any) => parameter.id);
   const [observationsResult, evidenceResult] = await Promise.all([
     parameterIds.length
-      ? supabase
-          .from("agent_parameter_observations")
-          .select("parameter_id,value_numeric,value_text,source,evidence_uri,confidence,observed_at,metadata")
-          .in("parameter_id", parameterIds)
-          .order("observed_at", { ascending: false })
-          .limit(30)
+      ? (() => {
+          let query = supabase
+            .from("agent_parameter_observations")
+            .select("parameter_id,business_global_id,value_numeric,value_text,source,evidence,observed_at,metadata")
+            .in("parameter_id", parameterIds);
+          if (businessGlobalId) query = query.eq("business_global_id", businessGlobalId);
+          return query.order("observed_at", { ascending: false }).limit(30);
+        })()
       : Promise.resolve({ data: [], error: null }),
     mission?.id
       ? supabase
