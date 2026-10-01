@@ -200,8 +200,7 @@ export async function wakeAgent(input: WakeInput) {
   const grants = (grantsResult.data || []).filter((grant: any) => INTERNAL_ACTIONS.has(grant.action_key));
   const allowedActions = grants.map((grant: any) => grant.action_key);
   if (!allowedActions.length) {
-    await markWake({
-      supabase,
+    await markWake(supabase, {
       event: sourceEvent,
       agentSlug: input.agentSlug,
       stageKey,
@@ -266,8 +265,7 @@ export async function wakeAgent(input: WakeInput) {
       if (decisionResult) return decisionResult;
 
       if (decision === "noop") {
-        await markWake({
-          supabase,
+        await markWake(supabase, {
           event: sourceEvent,
           agentSlug: input.agentSlug,
           stageKey,
@@ -301,8 +299,7 @@ export async function wakeAgent(input: WakeInput) {
       });
       if (error) throw error;
 
-      await markWake({
-        supabase,
+      await markWake(supabase, {
         event: sourceEvent,
         agentSlug: input.agentSlug,
         stageKey,
