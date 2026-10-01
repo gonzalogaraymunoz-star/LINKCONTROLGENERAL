@@ -163,7 +163,7 @@ export async function wakeAgent(input: WakeInput) {
           .select("id,source_provider,event_type,entity_type,global_id,payload,occurred_at,received_at")
           .eq("global_id", businessGlobalId)
           .order("received_at", { ascending: false })
-          .limit(12)
+          .limit(6)
       : Promise.resolve({ data: [], error: null }),
     stageKey
       ? supabase
@@ -220,7 +220,7 @@ export async function wakeAgent(input: WakeInput) {
             .select("parameter_id,business_global_id,value_numeric,value_text,source,evidence,observed_at,metadata")
             .in("parameter_id", parameterIds);
           if (businessGlobalId) query = query.eq("business_global_id", businessGlobalId);
-          return query.order("observed_at", { ascending: false }).limit(30);
+          return query.order("observed_at", { ascending: false }).limit(12);
         })()
       : Promise.resolve({ data: [], error: null }),
     mission?.id
@@ -343,14 +343,14 @@ export async function wakeAgent(input: WakeInput) {
     ].join("\n"),
     tools: { decide: decisionTool },
     toolChoice: "required",
-    stopWhen: stepCountIs(2),
+    stopWhen: stepCountIs(1),
   });
 
   const result = await agent.generate({
     prompt:
       "Evaluate this LINK wake context and make one governed decision. Context JSON follows:\n" +
       JSON.stringify(context),
-    timeout: { totalMs: 50_000, stepMs: 35_000 },
+    timeout: { totalMs: 100_000, stepMs: 90_000 },
   });
 
   if (!decisionResult) throw new Error("agent_returned_no_governed_decision");
