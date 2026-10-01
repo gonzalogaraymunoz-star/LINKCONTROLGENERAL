@@ -60,11 +60,38 @@ export async function GET(request: NextRequest) {
         }),
       );
     } catch (wakeError: any) {
+      const errorMessage = wakeError?.message || "agent_wake_failed";
+      console.error("LINK agent wake failed", {
+        agentSlug,
+        eventId: event.id,
+        error: errorMessage,
+      });
+
+      await supabase.from("event_bus").upsert(
+        {
+          control_id: "00000000-0000-0000-0000-000000000001",
+          source_provider: "agent-runtime",
+          event_type: "AGENT_WAKE_FAILED",
+          entity_type: event.entity_type || "business",
+          global_id: event.global_id || null,
+          correlation_id: event.id,
+          dedupe_key: `agent_wake_failed:${event.id}:${agentSlug}`,
+          payload: {
+            source_event_id: event.id,
+            source_event_type: event.event_type,
+            agent_slug: agentSlug,
+            error: errorMessage,
+          },
+          occurred_at: new Date().toISOString(),
+        },
+        { onConflict: "dedupe_key" },
+      );
+
       results.push({
         ok: false,
         agentSlug,
         eventId: event.id,
-        error: wakeError?.message || "agent_wake_failed",
+        error: errorMessage,
       });
     }
   }
