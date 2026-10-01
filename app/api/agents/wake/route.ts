@@ -2,12 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCentralSupabase } from "@/lib/supabase/server";
 import { routeEventToAgent, wakeAgent } from "@/lib/agents/runtime";
 
-const MAX_EVENTS_PER_WAKE = 3;
+const MAX_EVENTS_PER_WAKE = 1;
 
 function authorizedCron(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (secret) return request.headers.get("authorization") === `Bearer ${secret}`;
   return Boolean(request.headers.get("x-vercel-cron-schedule"));
+}
+
+export const maxDuration = 120;
+
+function eventPriority(event: { source_provider?: string | null; event_type?: string | null }) {
+  const value = `${event.source_provider || ""} ${event.event_type || ""}`.toLowerCase();
+  if (/lead|prospect|contact|form|whatsapp|message|inbox/.test(value)) return 100;
+  if (/payment|paid|checkout|purchase|sale|quote|cotiza|invoice|mercado.?pago/.test(value)) return 90;
+  if (/onboard|welcome|activation|booking.?confirmed|reservation.?confirmed/.test(value)) return 80;
+  if (/delivery|delivered|service|tour|arrival|attendance|fulfilled/.test(value)) return 70;
+  if (/review|nps|referral|repeat|recompra|retention|testimonial|postventa/.test(value)) return 60;
+  if (/rrss|social|post|campaign|traffic|attention|reach|click|impression|utm/.test(value)) return 50;
+  if (String(event.source_provider || "").toLowerCase() === "link_game") return 10;
+  return 30;
 }
 
 export async function GET(request: NextRequest) {
@@ -33,6 +47,11 @@ export async function GET(request: NextRequest) {
   const candidates = (events || [])
     .filter((event: any) => !["agent-runtime", "control-central"].includes(String(event.source_provider || "")))
     .filter((event: any) => !/^(AGENT_|MISSION_)/.test(String(event.event_type || "")))
+    .sort((a: any, b: any) => {
+      const priorityDelta = eventPriority(b) - eventPriority(a);
+      if (priorityDelta !== 0) return priorityDelta;
+      return new Date(a.received_at || 0).getTime() - new Date(b.received_at || 0).getTime();
+    })
     .slice(0, 12);
 
   const results: unknown[] = [];
