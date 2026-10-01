@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCentralSupabase } from "@/lib/supabase/server";
 
 const ROOT_CONTROL_ID = "00000000-0000-0000-0000-000000000001";
-const MODEL = process.env.LINK_AGENT_MODEL || "openai/gpt-6.1-sol";
+const MODEL = process.env.LINK_AGENT_MODEL || "openai/gpt-5.6-sol";
 
 const INTERNAL_ACTIONS = new Set([
   "stage.diagnosis.record",
