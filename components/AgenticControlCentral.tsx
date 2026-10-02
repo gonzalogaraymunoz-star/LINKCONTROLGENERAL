@@ -302,6 +302,17 @@ export default function AgenticControlCentral({
               </span>
             </button>
           ))}
+          <a
+            className="agentic-guide-link"
+            href="/linkguide"
+            title={collapsed ? "LINK Guide" : undefined}
+          >
+            <Icon name="grid" />
+            <span>
+              <b>LINK Guide</b>
+              <small>Mapa y direcciones</small>
+            </span>
+          </a>
         </nav>
 
         <div className="agentic-sidebar-section">
