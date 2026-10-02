@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCentralSupabase } from "@/lib/supabase/server";
-import { routeEventToAgent, wakeAgent } from "@/lib/agents/runtime";
+import { wakeAgent } from "@/lib/agents/runtime";
 
-const MAX_EVENTS_PER_WAKE = 1;
+const ROOT_CONTROL_ID = "00000000-0000-0000-0000-000000000001";
 
 function authorizedCron(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -12,16 +12,25 @@ function authorizedCron(request: NextRequest) {
 
 export const maxDuration = 120;
 
-function eventPriority(event: { source_provider?: string | null; event_type?: string | null }) {
-  const value = `${event.source_provider || ""} ${event.event_type || ""}`.toLowerCase();
-  if (/lead|prospect|contact|form|whatsapp|message|inbox/.test(value)) return 100;
-  if (/payment|paid|checkout|purchase|sale|quote|cotiza|invoice|mercado.?pago/.test(value)) return 90;
-  if (/onboard|welcome|activation|booking.?confirmed|reservation.?confirmed/.test(value)) return 80;
-  if (/delivery|delivered|service|tour|arrival|attendance|fulfilled/.test(value)) return 70;
-  if (/review|nps|referral|repeat|recompra|retention|testimonial|postventa/.test(value)) return 60;
-  if (/rrss|social|post|campaign|traffic|attention|reach|click|impression|utm/.test(value)) return 50;
-  if (String(event.source_provider || "").toLowerCase() === "link_game") return 10;
-  return 30;
+async function updateScope(
+  supabase: NonNullable<ReturnType<typeof getCentralSupabase>>,
+  work: any,
+  patch: Record<string, unknown>,
+) {
+  let query = supabase.from("agent_scope_state").update({
+    ...patch,
+    updated_at: new Date().toISOString(),
+  }).eq("agent_slug", work.agent_slug);
+
+  if (work.business_global_id) {
+    query = query.eq("business_global_id", work.business_global_id);
+    if (work.stage_key) query = query.eq("stage_key", work.stage_key);
+  } else {
+    query = query.eq("scope_key", "ecosystem:link-director");
+  }
+
+  const { error } = await query;
+  if (error) throw error;
 }
 
 export async function GET(request: NextRequest) {
@@ -34,91 +43,155 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "central_supabase_not_configured" }, { status: 503 });
   }
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: events, error } = await supabase
-    .from("event_bus")
-    .select("id,source_provider,event_type,entity_type,global_id,received_at")
-    .gte("received_at", since)
-    .order("received_at", { ascending: true })
-    .limit(30);
-
-  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-
-  const candidates = (events || [])
-    .filter((event: any) => !["agent-runtime", "control-central"].includes(String(event.source_provider || "")))
-    .filter((event: any) => !/^(AGENT_|MISSION_)/.test(String(event.event_type || "")))
-    .sort((a: any, b: any) => {
-      const priorityDelta = eventPriority(b) - eventPriority(a);
-      if (priorityDelta !== 0) return priorityDelta;
-      return new Date(a.received_at || 0).getTime() - new Date(b.received_at || 0).getTime();
-    })
-    .slice(0, 12);
-
-  const results: unknown[] = [];
-  let attempted = 0;
-
-  for (const event of candidates) {
-    if (attempted >= MAX_EVENTS_PER_WAKE) break;
-    const agentSlug = routeEventToAgent(String(event.event_type || ""), String(event.source_provider || ""));
-
-    const markerKey = `agent_wake:${event.id}:${agentSlug}`;
-    const { data: marker } = await supabase
-      .from("event_bus")
-      .select("id")
-      .eq("dedupe_key", markerKey)
-      .maybeSingle();
-    if (marker) continue;
-
-    attempted += 1;
-    try {
-      results.push(
-        await wakeAgent({
-          agentSlug,
-          eventId: event.id,
-          businessGlobalId: event.global_id || null,
-        }),
-      );
-    } catch (wakeError: any) {
-      const errorMessage = wakeError?.message || "agent_wake_failed";
-      console.error("LINK agent wake failed", {
-        agentSlug,
-        eventId: event.id,
-        error: errorMessage,
-      });
-
-      await supabase.from("event_bus").upsert(
-        {
-          control_id: "00000000-0000-0000-0000-000000000001",
-          source_provider: "agent-runtime",
-          event_type: "AGENT_WAKE_FAILED",
-          entity_type: event.entity_type || "business",
-          global_id: event.global_id || null,
-          correlation_id: event.id,
-          dedupe_key: `agent_wake_failed:${event.id}:${agentSlug}`,
-          payload: {
-            source_event_id: event.id,
-            source_event_type: event.event_type,
-            agent_slug: agentSlug,
-            error: errorMessage,
-          },
-          occurred_at: new Date().toISOString(),
-        },
-        { onConflict: "dedupe_key" },
-      );
-
-      results.push({
-        ok: false,
-        agentSlug,
-        eventId: event.id,
-        error: errorMessage,
-      });
-    }
+  const { data: refresh, error: refreshError } = await supabase.rpc("link_refresh_agent_work_queue_v1");
+  if (refreshError) {
+    return NextResponse.json({ ok: false, error: refreshError.message }, { status: 500 });
   }
 
-  return NextResponse.json({
-    ok: true,
-    checked: candidates.length,
-    attempted,
-    results,
-  });
+  const { data: claimed, error: claimError } = await supabase.rpc("link_claim_agent_work_v1");
+  if (claimError) {
+    return NextResponse.json({ ok: false, error: claimError.message }, { status: 500 });
+  }
+
+  const work = Array.isArray(claimed) ? claimed[0] : null;
+  if (!work) {
+    return NextResponse.json({ ok: true, attempted: 0, refresh, state: "idle" });
+  }
+
+  try {
+    const result: any = await wakeAgent({
+      agentSlug: work.agent_slug,
+      eventId: work.source_event_id || null,
+      businessGlobalId: work.business_global_id || null,
+      workItemId: work.id,
+      stageKey: work.stage_key || null,
+      workType: work.work_type || null,
+      workReason: work.reason || null,
+      missionId: work.mission_id || null,
+    });
+
+    const decision = result?.decision || null;
+    const proposed = decision?.decision === "propose";
+    const commandId = proposed ? String(decision?.commandId || "") || null : null;
+    const queueStatus = proposed ? "awaiting_approval" : "completed";
+    const now = new Date().toISOString();
+
+    const { error: queueError } = await supabase
+      .from("agent_work_queue")
+      .update({
+        status: queueStatus,
+        command_id: commandId,
+        last_error: null,
+        next_attempt_at: null,
+        completed_at: proposed ? null : now,
+        updated_at: now,
+        metadata: {
+          ...(work.metadata || {}),
+          last_result: result,
+        },
+      })
+      .eq("id", work.id);
+    if (queueError) throw queueError;
+
+    await updateScope(supabase, work, {
+      state: proposed ? "waiting_approval" : (work.mission_id ? "working" : "watching"),
+      current_work_id: proposed ? work.id : null,
+      last_wake_at: now,
+      last_success_at: now,
+    });
+
+    if (!proposed) {
+      await supabase.rpc("link_refresh_agent_work_queue_v1");
+    }
+
+    return NextResponse.json({
+      ok: true,
+      attempted: 1,
+      refresh,
+      work: {
+        id: work.id,
+        agentSlug: work.agent_slug,
+        stageKey: work.stage_key,
+        workType: work.work_type,
+        reason: work.reason,
+        attempt: work.attempt_count,
+      },
+      result,
+    });
+  } catch (wakeError: any) {
+    const errorMessage = wakeError?.message || "agent_wake_failed";
+    const attemptCount = Number(work.attempt_count || 1);
+    const maxAttempts = Number(work.max_attempts || 2);
+    const shouldRetry = attemptCount < maxAttempts;
+    const now = new Date().toISOString();
+    const nextAttempt = shouldRetry
+      ? new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      : null;
+
+    console.error("LINK agent work failed", {
+      workId: work.id,
+      agentSlug: work.agent_slug,
+      attemptCount,
+      maxAttempts,
+      error: errorMessage,
+    });
+
+    await supabase
+      .from("agent_work_queue")
+      .update({
+        status: shouldRetry ? "retry_wait" : "blocked",
+        last_error: errorMessage,
+        next_attempt_at: nextAttempt,
+        updated_at: now,
+      })
+      .eq("id", work.id);
+
+    await updateScope(supabase, work, {
+      state: shouldRetry ? "retry_wait" : "blocked",
+      current_work_id: work.id,
+      last_wake_at: now,
+      last_failure_at: now,
+    });
+
+    await supabase.from("event_bus").upsert(
+      {
+        control_id: ROOT_CONTROL_ID,
+        source_provider: "agent-runtime",
+        event_type: "AGENT_WAKE_FAILED",
+        entity_type: work.business_global_id ? "business" : "system",
+        global_id: work.business_global_id || null,
+        correlation_id: String(work.source_event_id || work.id),
+        dedupe_key: `agent_work_failed:${work.id}`,
+        payload: {
+          work_id: work.id,
+          source_event_id: work.source_event_id || work.id,
+          source_event_type: work.event_type || work.work_type,
+          agent_slug: work.agent_slug,
+          stage_key: work.stage_key || null,
+          attempt_count: attemptCount,
+          max_attempts: maxAttempts,
+          retry_scheduled: shouldRetry,
+          error: errorMessage,
+        },
+        occurred_at: now,
+      },
+      { onConflict: "dedupe_key" },
+    );
+
+    return NextResponse.json({
+      ok: false,
+      attempted: 1,
+      refresh,
+      work: {
+        id: work.id,
+        agentSlug: work.agent_slug,
+        stageKey: work.stage_key,
+        workType: work.work_type,
+        attempt: attemptCount,
+        maxAttempts,
+      },
+      retryScheduled: shouldRetry,
+      error: errorMessage,
+    });
+  }
 }
