@@ -182,6 +182,16 @@ function operatingStateRank(value?: string | null) {
   return rank[value || ""] || 0;
 }
 
+function dotKind(agent: AgentRecord) {
+  if (agent.metadata?.agent_kind === "linksubdot") return "LINKSUBDOT";
+  if (agent.metadata?.agent_kind === "linkdot") return "LINKDOT";
+  return "AGENTE";
+}
+
+function dotOperationalSlug(agent: AgentRecord) {
+  return agent.metadata?.dot_slug || agent.slug;
+}
+
 function humanStatus(value?: string | null) {
   const map: Record<string, string> = {
     planned: "Pendiente",
@@ -316,7 +326,7 @@ export default function AgenticControlCentral({
         </nav>
 
         <div className="agentic-sidebar-section">
-          <div className="agentic-sidebar-label">AGENTES</div>
+          <div className="agentic-sidebar-label">LINKDOTS</div>
           {initialAgents.length ? (
             initialAgents.map((item) => (
               <button
@@ -362,7 +372,7 @@ export default function AgenticControlCentral({
             <Icon name="menu" />
           </button>
           <div className="agentic-breadcrumb">
-            <small>CONTROL CENTRAL / SUCURSAL AGÉNTICA</small>
+            <small>CONTROL CENTRAL / LINKDOT OS</small>
             <b>{section}</b>
           </div>
           <button className="sync-button" onClick={() => void loadSummary()} disabled={loading}>
@@ -505,7 +515,7 @@ function HomePanel({
         </section>
 
         <section className="surface span-2">
-          <SectionHead eyebrow="EQUIPO" title="Agentes en turno" note="Solo habitantes registrados realmente." />
+          <SectionHead eyebrow="EQUIPO" title="LINKDOTS en turno" note="Responsabilidades persistentes y sus subagentes especializados." />
           <div className="agent-card-grid">
             {agents.map((item) => (
               <button className="agent-card" key={item.id} onClick={() => openAgent(item.id)}>
@@ -516,7 +526,8 @@ function HomePanel({
                 <h3>{item.name}</h3>
                 <p>{item.description}</p>
                 <div className="agent-card-meta">
-                  <span>{humanStatus(item.runtimeState?.mode || item.metadata?.autonomy_mode)}</span>
+                  <span>{dotKind(item)}</span>
+                  <span>{dotOperationalSlug(item)}</span>
                   <span>{item.capabilities.length} capacidades</span>
                 </div>
               </button>
@@ -588,7 +599,7 @@ function AgentsPanel({
       ) : (
         <section className="agents-layout">
           <aside className="agent-index surface">
-            <SectionHead eyebrow="AGENTES" title="Equipo LINK" note="Selecciona un agente para revisar su mesa de trabajo." />
+            <SectionHead eyebrow="LINKDOT OS" title="Equipo LINK" note="LINKDOT mantiene un área; LINKSUBDOT recibe trabajo especializado por delegación." />
             {agents.map((item) => (
               <button
                 key={item.id}
@@ -596,12 +607,12 @@ function AgentsPanel({
                 onClick={() => select(item.id)}
               >
                 <span className="agent-avatar small">{item.name.slice(0, 2).toUpperCase()}</span>
-                <span><b>{item.name}</b><small>{humanStatus(item.runtimeState?.mode || item.metadata?.autonomy_mode)}</small></span>
+                <span><b>{item.name}</b><small>{dotKind(item)} · {dotOperationalSlug(item)}</small></span>
                 <span className="live-dot" />
               </button>
             ))}
           </aside>
-          {agent ? <AgentFicha agent={agent} summary={summary} /> : null}
+          {agent ? <AgentFicha agent={agent} agents={agents} summary={summary} /> : null}
         </section>
       )}
     </section>
@@ -667,7 +678,7 @@ function AgentProductionBoard({
       </section>
 
       <section className="surface">
-        <SectionHead eyebrow="DIRECTORES" title="Estado operativo" note="Una fila por agente. La sugerencia siempre termina en un prompt utilizable." />
+        <SectionHead eyebrow="LINKDOT OS" title="Estado operativo" note="LINKDOT y LINKSUBDOT comparten memoria, permisos, evidencia y cola persistente." />
         <div className="agent-production-table">
           <div className="agent-production-row is-head">
             <span>Agente</span><span>Etapa</span><span>Misión</span><span>Acciones</span><span>Evidencia</span><span>Siguiente movimiento</span>
@@ -749,11 +760,17 @@ function AgentProductionBoard({
   );
 }
 
-function AgentFicha({ agent, summary }: { agent: AgentRecord; summary: any }) {
+function AgentFicha({ agent, agents, summary }: { agent: AgentRecord; agents: AgentRecord[]; summary: any }) {
   const runtime = agent.runtimeState;
   const production = (summary?.agentProduction || []).find((row: any) => row.agentSlug === agent.slug) || {};
   const currentMission = production?.missions?.current || null;
   const parameters = production?.parameters || [];
+  const kind = dotKind(agent);
+  const operationalSlug = dotOperationalSlug(agent);
+  const subdots = agents.filter((item) => item.metadata?.parent_dot === operationalSlug);
+  const parentDot = agent.metadata?.parent_dot
+    ? agents.find((item) => dotOperationalSlug(item) === agent.metadata?.parent_dot)
+    : null;
 
   return (
     <article className="agent-ficha">
@@ -761,7 +778,7 @@ function AgentFicha({ agent, summary }: { agent: AgentRecord; summary: any }) {
         <div className="agent-ficha-identity">
           <span className="agent-avatar hero">{agent.name.slice(0, 2).toUpperCase()}</span>
           <div>
-            <div className="eyebrow">AGENTE · {agent.metadata?.stage_key || "DIRECCIÓN"}</div>
+            <div className="eyebrow">{kind} · {agent.metadata?.dot_area || agent.metadata?.area || agent.metadata?.stage_key || "DIRECCIÓN"}</div>
             <h1>{agent.name}</h1>
             <p>{agent.description}</p>
           </div>
@@ -792,6 +809,43 @@ function AgentFicha({ agent, summary }: { agent: AgentRecord; summary: any }) {
             <span><small>Evidencia pendiente</small><b>{production?.evidence?.requestedOrReceived || 0}</b></span>
           </div>
         </section>
+
+        {(kind === "LINKDOT" || kind === "LINKSUBDOT") ? (
+          <section className="surface span-2">
+            <SectionHead
+              eyebrow="CONSTITUCIÓN DOT"
+              title={kind === "LINKDOT" ? "Responsabilidad y delegación" : "Especialidad delegada"}
+              note={operationalSlug}
+            />
+            <div className="mission-facts">
+              <span><small>Tipo</small><b>{kind}</b></span>
+              <span><small>Autonomía</small><b>{humanStatus(runtime?.mode || agent.metadata?.autonomy_mode)}</b></span>
+              <span><small>Fuente</small><b>{agent.metadata?.source_of_truth || "supabase"}</b></span>
+            </div>
+            <p className="body-copy">
+              {agent.metadata?.responsibility || agent.description}
+            </p>
+            {agent.metadata?.handoff_boundary ? (
+              <p className="body-copy"><b>Límite de entrega:</b> {agent.metadata.handoff_boundary}</p>
+            ) : null}
+            {kind === "LINKDOT" ? (
+              <div className="capability-grid">
+                {subdots.map((subdot) => (
+                  <div className="capability-card" key={subdot.id}>
+                    <div><b>{subdot.name}</b><code>{subdot.slug}</code></div>
+                    <p>{subdot.metadata?.responsibility || subdot.description}</p>
+                  </div>
+                ))}
+                {!subdots.length && <Empty text="Este LINKDOT todavía no tiene LINKSUBDOT registrados." />}
+              </div>
+            ) : parentDot ? (
+              <div className="compact-row">
+                <span className="live-dot" />
+                <div><b>Depende de {parentDot.name}</b><small>{dotOperationalSlug(parentDot)}</small></div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="surface span-2 suggestion-card">
           <SectionHead eyebrow="SIGUIENTE MOVIMIENTO" title={production?.suggestion || "Observar y medir"} note="Prompt listo para continuar conmigo." />
