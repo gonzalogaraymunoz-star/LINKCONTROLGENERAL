@@ -7,7 +7,7 @@ export async function GET() {
   const capabilities = getGatewayCapabilities();
   if (!supabase) return NextResponse.json({ ok: false, error: "central_supabase_not_configured" }, { status: 503 });
 
-  const [clientsResult, profilesResult, plansResult, strategiesResult, cyclesResult, calendarsResult, gesturesResult, actionsResult, viewsResult, integrationsResult, memoriesResult, commandsResult, eventsResult, worldNodesResult, worldEdgesResult, worldSummaryResult, missionsResult, evidenceResult, allCommandsResult, parametersResult, observationsResult, wakesResult] = await Promise.all([
+  const [clientsResult, profilesResult, plansResult, strategiesResult, cyclesResult, calendarsResult, gesturesResult, actionsResult, viewsResult, integrationsResult, memoriesResult, commandsResult, eventsResult, worldNodesResult, worldEdgesResult, worldSummaryResult, missionsResult, evidenceResult, allCommandsResult, parametersResult, observationsResult, wakesResult, operatingResult, workQueueResult] = await Promise.all([
     supabase.from("clients").select("id,name,slug,status,short_code,symbol,accent,metadata,created_at,updated_at,global_id").eq("status", "active").is("archived_at", null).order("created_at", { ascending: false }),
     supabase.from("client_profiles").select("client_id,brand_dna,communication_rules,business_rules,metadata"),
     supabase.from("client_plan_assignments").select("client_id,plan_name_snapshot,agreed_price,currency,status,starts_at,objectives,metadata").eq("status", "active"),
@@ -35,6 +35,14 @@ export async function GET() {
       .in("event_type", ["AGENT_WAKE_PROPOSED", "AGENT_WAKE_NOOP", "AGENT_WAKE_FAILED"])
       .order("received_at", { ascending: false })
       .limit(40),
+    supabase.from("agent_operating_state_v")
+      .select("*")
+      .order("agent_slug")
+      .order("priority", { ascending: false }),
+    supabase.from("agent_work_queue")
+      .select("id,agent_slug,stage_key,business_global_id,source_event_id,source_provider,event_type,work_type,priority,status,reason,attempt_count,max_attempts,last_error,next_attempt_at,command_id,mission_id,created_at,updated_at,completed_at")
+      .order("updated_at", { ascending: false })
+      .limit(150),
   ]);
 
   const clientRows = clientsResult.data ?? [], profiles = profilesResult.data ?? [], plans = plansResult.data ?? [], strategies = strategiesResult.data ?? [], cycles = cyclesResult.data ?? [], calendars = calendarsResult.data ?? [], gestures = gesturesResult.data ?? [], integrationConnections = integrationsResult.data ?? [], pendingCommands = commandsResult.data ?? [], recentEvents = eventsResult.data ?? [];
@@ -47,6 +55,8 @@ export async function GET() {
   const stageParameters = parametersResult.data ?? [];
   const parameterObservations = observationsResult.data ?? [];
   const wakeEvents = wakesResult.data ?? [];
+  const agentOperatingState = operatingResult.data ?? [];
+  const agentWorkQueue = workQueueResult.data ?? [];
   const byId = Object.fromEntries(capabilities.map((item) => [item.id, item]));
   const centralSupabase = byId["supabase.central.health"], github = byId["github.repo.health"];
   const twentyActive = integrationConnections.some((item) => item.provider === "twenty" && item.status === "active");
@@ -146,11 +156,20 @@ export async function GET() {
     };
   });
 
+  const successfulWakeKeys = new Set(
+    wakeEvents
+      .filter((wake: any) => ["AGENT_WAKE_PROPOSED", "AGENT_WAKE_NOOP"].includes(wake.event_type))
+      .map((wake: any) => `${wake?.payload?.agent_slug || ""}:${wake?.payload?.source_event_id || ""}`),
+  );
+
   const agentWakeEvidence = wakeEvents.map((wake: any) => {
     const commandId = wake?.payload?.command_id || null;
     const command = commandId
       ? allAgentCommands.find((row: any) => row.id === commandId)
       : null;
+    const sourceEventId = wake?.payload?.source_event_id || null;
+    const recovered = wake.event_type === "AGENT_WAKE_FAILED" &&
+      successfulWakeKeys.has(`${wake?.payload?.agent_slug || ""}:${sourceEventId || ""}`);
     return {
       id: wake.id,
       eventType: wake.event_type,
@@ -167,6 +186,7 @@ export async function GET() {
       requiresApproval: command?.requires_approval ?? null,
       occurredAt: wake.occurred_at || wake.received_at,
       receivedAt: wake.received_at,
+      recovered,
     };
   });
 
@@ -187,6 +207,9 @@ export async function GET() {
       views: viewsResult.count ?? 0,
       memories: memoriesResult.count ?? 0,
       pendingCommands: pendingCommands.length,
+      agentQueue: agentWorkQueue.filter((row: any) => ["queued","processing","retry_wait"].includes(row.status)).length,
+      agentWaitingApproval: agentWorkQueue.filter((row: any) => row.status === "awaiting_approval").length,
+      agentBlocked: agentWorkQueue.filter((row: any) => row.status === "blocked").length,
     },
     operational: {
       clients: clients.length,
@@ -210,6 +233,8 @@ export async function GET() {
     agentMissions: missions,
     agentEvidence: missionEvidence,
     agentWakeEvidence,
+    agentOperatingState,
+    agentWorkQueue,
     services,
     integrations: integrationConnections,
     recentEvents,
