@@ -154,6 +154,34 @@ function wakeStateLabel(value?: string | null) {
   return value || "EVENTO";
 }
 
+function operatingStateLabel(value?: string | null) {
+  const map: Record<string, string> = {
+    watching: "Vigilando",
+    working: "En misión",
+    queued: "En cola",
+    processing: "Trabajando",
+    waiting_approval: "Espera aprobación",
+    retry_wait: "Reintento programado",
+    blocked: "Bloqueado",
+    idle: "En espera",
+  };
+  return map[value || ""] || value || "—";
+}
+
+function operatingStateRank(value?: string | null) {
+  const rank: Record<string, number> = {
+    blocked: 90,
+    waiting_approval: 80,
+    processing: 70,
+    queued: 60,
+    retry_wait: 50,
+    working: 40,
+    watching: 20,
+    idle: 10,
+  };
+  return rank[value || ""] || 0;
+}
+
 function humanStatus(value?: string | null) {
   const map: Record<string, string> = {
     planned: "Pendiente",
@@ -184,6 +212,26 @@ export default function AgenticControlCentral({
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    try {
+      const storedSection = window.localStorage.getItem("link-control-section") as Section | null;
+      if (storedSection && NAV.some((item) => item.id === storedSection)) setSection(storedSection);
+      const storedAgent = window.localStorage.getItem("link-control-agent");
+      if (storedAgent && initialAgents.some((item) => item.id === storedAgent)) setSelectedAgent(storedAgent);
+    } catch {
+      // Local persistence is optional; Supabase remains the source of truth.
+    }
+  }, [initialAgents]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem("link-control-section", section); } catch {}
+  }, [section]);
+
+  useEffect(() => {
+    if (!selectedAgent) return;
+    try { window.localStorage.setItem("link-control-agent", selectedAgent); } catch {}
+  }, [selectedAgent]);
 
   const loadSummary = useCallback(async () => {
     setLoading(true);
@@ -354,6 +402,7 @@ function HomePanel({
 }) {
   const tasks = summary?.tasks || [];
   const clients = summary?.clients || [];
+  const operating = summary?.agentOperatingState || [];
   const wakeEvidence = (summary?.agentWakeEvidence || []).filter(
     (wake: any) => wake.eventType === "AGENT_WAKE_PROPOSED" || wake.eventType === "AGENT_WAKE_NOOP",
   );
@@ -384,6 +433,39 @@ function HomePanel({
       </div>
 
       <div className="workspace-grid">
+        <section className="surface span-2">
+          <SectionHead
+            eyebrow="FOCO PERSISTENTE"
+            title="Quién se ocupa de qué"
+            note="Supabase conserva territorio, misión, cola y próximo foco aunque cierres el panel."
+          />
+          <div className="compact-list">
+            {agents.map((item) => {
+              const scopes = operating
+                .filter((row: any) => row.agent_slug === item.slug)
+                .sort((a: any, b: any) =>
+                  (operatingStateRank(b.state) - operatingStateRank(a.state)) ||
+                  (Number(b.priority || 0) - Number(a.priority || 0))
+                );
+              const focus = scopes[0];
+              return (
+                <div className="compact-row" key={item.slug}>
+                  <span className={"status-pip" + (focus?.state !== "blocked" ? " on" : "")} />
+                  <div>
+                    <b>{item.name} · {operatingStateLabel(focus?.state)}</b>
+                    <small>
+                      {focus
+                        ? `${focus.business_name || "LINK"} · ${focus.stage_name || "Transversal"} → ${focus.current_focus}`
+                        : "Sin territorio persistido"}
+                    </small>
+                  </div>
+                  <span className="state-pill">{Number(focus?.queued_count || 0) + Number(focus?.waiting_approval_count || 0)} pendientes</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         <section className="surface span-2">
           <SectionHead
             eyebrow="PRUEBA DE VIDA"
@@ -882,12 +964,20 @@ function CalendarPanel({ summary, loading }: { summary: any; loading: boolean })
 
 function ActivityPanel({ summary, loading }: { summary: any; loading: boolean }) {
   const events = summary?.recentEvents || [];
-  const wakes = summary?.agentWakeEvidence || [];
+  const allWakes = summary?.agentWakeEvidence || [];
+  const recoveredFailures = allWakes.filter((wake: any) => wake.eventType === "AGENT_WAKE_FAILED" && wake.recovered);
+  const wakes = allWakes.filter((wake: any) => !(wake.eventType === "AGENT_WAKE_FAILED" && wake.recovered));
   return (
     <section className="panel-stack">
       <PageIntro eyebrow="ACTIVIDAD" title="Evidencia reciente" text="Lo que efectivamente entró al bus de eventos." />
       <section className="surface">
-        <SectionHead eyebrow="AGENTES" title="Despertares verificables" note="Runtime Vercel → evidencia Supabase → comando gobernado." />
+        <SectionHead
+          eyebrow="AGENTES"
+          title="Despertares verificables"
+          note={recoveredFailures.length
+            ? `Runtime Vercel → Supabase → comando gobernado · ${recoveredFailures.length} fallo(s) antiguos ya recuperados ocultos.`
+            : "Runtime Vercel → evidencia Supabase → comando gobernado."}
+        />
         <div className="compact-list">
           {wakes.slice(0, 12).map((wake: any) => (
             <div className="compact-row" key={wake.id}>
@@ -954,9 +1044,9 @@ function SystemPanel({
       <PageIntro eyebrow="SISTEMA" title="Salud de CONTROL CENTRAL" text="Capacidades que ya están conectadas de verdad." />
       <div className="metric-grid">
         <Metric label="Agentes" value={agents.length} accent />
-        <Metric label="Acciones registradas" value={summary?.metrics?.actions ?? "—"} />
-        <Metric label="Memorias" value={summary?.metrics?.memories ?? "—"} />
-        <Metric label="Vistas registradas" value={summary?.metrics?.views ?? "—"} />
+        <Metric label="Cola agéntica" value={summary?.metrics?.agentQueue ?? 0} />
+        <Metric label="Por aprobar" value={summary?.metrics?.agentWaitingApproval ?? 0} />
+        <Metric label="Bloqueados" value={summary?.metrics?.agentBlocked ?? 0} />
       </div>
       <div className="workspace-grid">
         <section className="surface">

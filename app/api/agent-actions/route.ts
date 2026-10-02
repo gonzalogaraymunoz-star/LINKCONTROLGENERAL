@@ -135,7 +135,54 @@ export async function POST(request: NextRequest) {
         p_approved_by: user.email || user.id,
       });
       if (error) throw error;
-      return NextResponse.json({ ok: true, decision: data });
+
+      const now = new Date().toISOString();
+      const { data: workItems } = await service
+        .from("agent_work_queue")
+        .select("id,agent_slug,business_global_id,stage_key,mission_id")
+        .eq("command_id", body.commandId)
+        .eq("status", "awaiting_approval");
+
+      if (workItems?.length) {
+        await service
+          .from("agent_work_queue")
+          .update({
+            status: "completed",
+            completed_at: now,
+            updated_at: now,
+            metadata: {
+              approval_decision: body.decision,
+              decided_by: user.email || user.id,
+              decided_at: now,
+            },
+          })
+          .eq("command_id", body.commandId)
+          .eq("status", "awaiting_approval");
+
+        for (const work of workItems) {
+          let scope = service
+            .from("agent_scope_state")
+            .update({
+              state: work.mission_id ? "working" : "watching",
+              current_work_id: null,
+              last_success_at: now,
+              updated_at: now,
+            })
+            .eq("agent_slug", work.agent_slug);
+
+          if (work.business_global_id) {
+            scope = scope.eq("business_global_id", work.business_global_id);
+            if (work.stage_key) scope = scope.eq("stage_key", work.stage_key);
+          } else {
+            scope = scope.eq("scope_key", "ecosystem:link-director");
+          }
+          await scope;
+        }
+
+        await service.rpc("link_refresh_agent_work_queue_v1");
+      }
+
+      return NextResponse.json({ ok: true, decision: data, workItemsClosed: workItems?.length || 0 });
     }
 
     if (op === "submit_evidence") {
