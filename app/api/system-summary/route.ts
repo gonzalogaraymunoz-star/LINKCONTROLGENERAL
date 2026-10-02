@@ -7,7 +7,7 @@ export async function GET() {
   const capabilities = getGatewayCapabilities();
   if (!supabase) return NextResponse.json({ ok: false, error: "central_supabase_not_configured" }, { status: 503 });
 
-  const [clientsResult, profilesResult, plansResult, strategiesResult, cyclesResult, calendarsResult, gesturesResult, actionsResult, viewsResult, integrationsResult, memoriesResult, commandsResult, eventsResult, worldNodesResult, worldEdgesResult, worldSummaryResult, missionsResult, evidenceResult, allCommandsResult, parametersResult, observationsResult] = await Promise.all([
+  const [clientsResult, profilesResult, plansResult, strategiesResult, cyclesResult, calendarsResult, gesturesResult, actionsResult, viewsResult, integrationsResult, memoriesResult, commandsResult, eventsResult, worldNodesResult, worldEdgesResult, worldSummaryResult, missionsResult, evidenceResult, allCommandsResult, parametersResult, observationsResult, wakesResult] = await Promise.all([
     supabase.from("clients").select("id,name,slug,status,short_code,symbol,accent,metadata,created_at,updated_at,global_id").eq("status", "active").is("archived_at", null).order("created_at", { ascending: false }),
     supabase.from("client_profiles").select("client_id,brand_dna,communication_rules,business_rules,metadata"),
     supabase.from("client_plan_assignments").select("client_id,plan_name_snapshot,agreed_price,currency,status,starts_at,objectives,metadata").eq("status", "active"),
@@ -29,6 +29,12 @@ export async function GET() {
     supabase.from("command_bus").select("id,command_type,action_key,actor,target_provider,entity_type,global_id,payload,status,result,error,requested_at,processed_at,gesture_code,requires_approval,approval_status,approved_by,approved_at").order("requested_at", { ascending: false }).limit(300),
     supabase.from("agent_stage_parameters").select("id,agent_slug,stage_key,parameter_key,label,direction,unit,description,source,metadata,updated_at").order("agent_slug").order("label"),
     supabase.from("agent_parameter_observations").select("id,parameter_id,business_global_id,value_numeric,value_text,observed_at,evidence,source,metadata").order("observed_at", { ascending: false }).limit(1000),
+    supabase.from("event_bus")
+      .select("id,source_provider,event_type,entity_type,global_id,correlation_id,dedupe_key,payload,occurred_at,received_at")
+      .eq("source_provider", "agent-runtime")
+      .in("event_type", ["AGENT_WAKE_PROPOSED", "AGENT_WAKE_NOOP", "AGENT_WAKE_FAILED"])
+      .order("received_at", { ascending: false })
+      .limit(40),
   ]);
 
   const clientRows = clientsResult.data ?? [], profiles = profilesResult.data ?? [], plans = plansResult.data ?? [], strategies = strategiesResult.data ?? [], cycles = cyclesResult.data ?? [], calendars = calendarsResult.data ?? [], gestures = gesturesResult.data ?? [], integrationConnections = integrationsResult.data ?? [], pendingCommands = commandsResult.data ?? [], recentEvents = eventsResult.data ?? [];
@@ -40,6 +46,7 @@ export async function GET() {
   const allAgentCommands = allCommandsResult.data ?? [];
   const stageParameters = parametersResult.data ?? [];
   const parameterObservations = observationsResult.data ?? [];
+  const wakeEvents = wakesResult.data ?? [];
   const byId = Object.fromEntries(capabilities.map((item) => [item.id, item]));
   const centralSupabase = byId["supabase.central.health"], github = byId["github.repo.health"];
   const twentyActive = integrationConnections.some((item) => item.provider === "twenty" && item.status === "active");
@@ -139,6 +146,30 @@ export async function GET() {
     };
   });
 
+  const agentWakeEvidence = wakeEvents.map((wake: any) => {
+    const commandId = wake?.payload?.command_id || null;
+    const command = commandId
+      ? allAgentCommands.find((row: any) => row.id === commandId)
+      : null;
+    return {
+      id: wake.id,
+      eventType: wake.event_type,
+      agentSlug: wake?.payload?.agent_slug || null,
+      sourceEventType: wake?.payload?.source_event_type || null,
+      actionKey: wake?.payload?.action_key || command?.action_key || null,
+      decision: wake?.payload?.decision || null,
+      reason: wake?.payload?.reason || wake?.payload?.error || null,
+      model: wake?.payload?.model || null,
+      globalId: wake.global_id || null,
+      commandId,
+      commandStatus: command?.status || null,
+      approvalStatus: command?.approval_status || null,
+      requiresApproval: command?.requires_approval ?? null,
+      occurredAt: wake.occurred_at || wake.received_at,
+      receivedAt: wake.received_at,
+    };
+  });
+
   const pipelineAmount = clients.reduce((sum: number, client: any) => sum + client.monthlyValue, 0);
   return NextResponse.json({
     ok: true,
@@ -178,6 +209,7 @@ export async function GET() {
     agentActions: allAgentCommands,
     agentMissions: missions,
     agentEvidence: missionEvidence,
+    agentWakeEvidence,
     services,
     integrations: integrationConnections,
     recentEvents,

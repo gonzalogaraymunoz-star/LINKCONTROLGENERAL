@@ -134,6 +134,26 @@ function dayKey(value?: string | null) {
   }).format(d);
 }
 
+function wakeActionLabel(value?: string | null) {
+  const map: Record<string, string> = {
+    "stage.diagnosis.record": "registró un diagnóstico",
+    "mission.create": "propuso crear una misión",
+    "agent.assign": "propuso asignar un agente",
+    "evidence.request": "pidió evidencia",
+    "stage.escalate": "propuso escalar",
+    "stage.block_scale": "propuso bloquear escala",
+    "stage.verify": "propuso verificar una etapa",
+  };
+  return map[value || ""] || value || "sin acción";
+}
+
+function wakeStateLabel(value?: string | null) {
+  if (value === "AGENT_WAKE_PROPOSED") return "DESPERTÓ";
+  if (value === "AGENT_WAKE_NOOP") return "DESPERTÓ · OBSERVÓ";
+  if (value === "AGENT_WAKE_FAILED") return "INTENTO FALLIDO";
+  return value || "EVENTO";
+}
+
 function humanStatus(value?: string | null) {
   const map: Record<string, string> = {
     planned: "Pendiente",
@@ -334,6 +354,10 @@ function HomePanel({
 }) {
   const tasks = summary?.tasks || [];
   const clients = summary?.clients || [];
+  const wakeEvidence = (summary?.agentWakeEvidence || []).filter(
+    (wake: any) => wake.eventType === "AGENT_WAKE_PROPOSED" || wake.eventType === "AGENT_WAKE_NOOP",
+  );
+  const awakeSlugs = new Set(wakeEvidence.map((wake: any) => wake.agentSlug).filter(Boolean));
   return (
     <section className="panel-stack">
       <div className="hero-card">
@@ -347,8 +371,8 @@ function HomePanel({
         </div>
         <div className="hero-live">
           <span className="live-dot" />
-          <b>{agents.length} agente{agents.length === 1 ? "" : "s"} registrado{agents.length === 1 ? "" : "s"}</b>
-          <small>{loading ? "Leyendo sistema…" : "Estado vivo"}</small>
+          <b>{awakeSlugs.size ? `${awakeSlugs.size} agente${awakeSlugs.size === 1 ? "" : "s"} despertaron` : `${agents.length} agentes registrados`}</b>
+          <small>{loading ? "Leyendo sistema…" : wakeEvidence[0] ? `Último despertar · ${when(wakeEvidence[0].occurredAt)}` : "Estado vivo"}</small>
         </div>
       </div>
 
@@ -360,6 +384,33 @@ function HomePanel({
       </div>
 
       <div className="workspace-grid">
+        <section className="surface span-2">
+          <SectionHead
+            eyebrow="PRUEBA DE VIDA"
+            title="Despertares reales"
+            note="Cada fila existe porque Vercel ejecutó un agente y escribió evidencia en Supabase."
+          />
+          <div className="compact-list">
+            {wakeEvidence.slice(0, 6).map((wake: any) => {
+              const agentName = agents.find((item) => item.slug === wake.agentSlug)?.name || wake.agentSlug || "Agente";
+              return (
+                <div className="compact-row" key={wake.id}>
+                  <span className="status-pip on" />
+                  <div>
+                    <b>{agentName} · {wakeStateLabel(wake.eventType)}</b>
+                    <small>
+                      {wake.sourceEventType || "señal"} → {wakeActionLabel(wake.actionKey)}
+                      {" · "}{when(wake.occurredAt)}
+                      {wake.approvalStatus ? ` · aprobación: ${humanStatus(wake.approvalStatus)}` : ""}
+                    </small>
+                  </div>
+                </div>
+              );
+            })}
+            {!wakeEvidence.length && !loading && <Empty text="Todavía no hay un despertar exitoso registrado." />}
+          </div>
+        </section>
+
         <section className="surface span-2">
           <SectionHead eyebrow="EQUIPO" title="Agentes en turno" note="Solo habitantes registrados realmente." />
           <div className="agent-card-grid">
@@ -831,9 +882,30 @@ function CalendarPanel({ summary, loading }: { summary: any; loading: boolean })
 
 function ActivityPanel({ summary, loading }: { summary: any; loading: boolean }) {
   const events = summary?.recentEvents || [];
+  const wakes = summary?.agentWakeEvidence || [];
   return (
     <section className="panel-stack">
       <PageIntro eyebrow="ACTIVIDAD" title="Evidencia reciente" text="Lo que efectivamente entró al bus de eventos." />
+      <section className="surface">
+        <SectionHead eyebrow="AGENTES" title="Despertares verificables" note="Runtime Vercel → evidencia Supabase → comando gobernado." />
+        <div className="compact-list">
+          {wakes.slice(0, 12).map((wake: any) => (
+            <div className="compact-row" key={wake.id}>
+              <span className={"status-pip" + (wake.eventType === "AGENT_WAKE_PROPOSED" || wake.eventType === "AGENT_WAKE_NOOP" ? " on" : "")} />
+              <div>
+                <b>{wake.agentSlug || "agente"} · {wakeStateLabel(wake.eventType)}</b>
+                <small>
+                  {wake.sourceEventType || "señal"} → {wakeActionLabel(wake.actionKey)}
+                  {" · "}{when(wake.occurredAt)}
+                  {wake.commandId ? ` · comando ${String(wake.commandId).slice(0, 8)}` : ""}
+                  {wake.approvalStatus ? ` · ${humanStatus(wake.approvalStatus)}` : ""}
+                </small>
+              </div>
+            </div>
+          ))}
+          {!wakes.length && !loading && <Empty text="No hay despertares registrados todavía." />}
+        </div>
+      </section>
       <section className="surface event-stream">
         {events.map((event: any) => (
           <article key={event.id}>
