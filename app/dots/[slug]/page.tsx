@@ -72,8 +72,18 @@ async function loadDot(slug: string) {
   const operationalSlug = String(metadata.dot_slug || (slug.startsWith("linkdot-") ? slug : skill.slug));
   const dotSlugs = Array.from(new Set([skill.slug, operationalSlug]));
 
+  const { data: workspaceAccessRows } = await supabase
+    .from("link_dot_workspace_access")
+    .select("*")
+    .in("dot_slug", dotSlugs)
+    .eq("status", "active")
+    .order("is_default", { ascending: false });
+
+  const grantedWorkspaceIds = (workspaceAccessRows ?? []).map((row: AnyRow) => row.workspace_id);
+
   const [
     workspaceResult,
+    grantedWorkspaceResult,
     missionsResult,
     grantsResult,
     stateResult,
@@ -90,6 +100,13 @@ async function loadDot(slug: string) {
       .select("*")
       .or(`owner_director_slug.eq.${skill.slug},owner_linkdot_slug.eq.${operationalSlug}`)
       .order("created_at", { ascending: true }),
+    grantedWorkspaceIds.length
+      ? supabase
+          .from("link_dot_workspaces")
+          .select("*")
+          .in("id", grantedWorkspaceIds)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] as AnyRow[] }),
     supabase
       .from("agent_missions")
       .select("*")
@@ -148,7 +165,11 @@ async function loadDot(slug: string) {
       .limit(80),
   ]);
 
-  const workspaces = workspaceResult.data ?? [];
+  const workspaceById = new Map<string, AnyRow>();
+  for (const row of [...(workspaceResult.data ?? []), ...(grantedWorkspaceResult.data ?? [])]) {
+    workspaceById.set(String((row as AnyRow).id), row as AnyRow);
+  }
+  const workspaces = Array.from(workspaceById.values());
   const workspaceIds = workspaces.map((row: AnyRow) => row.id);
   const missions = missionsResult.data ?? [];
   const missionIds = missions.map((row: AnyRow) => row.id);
@@ -216,9 +237,16 @@ async function loadDot(slug: string) {
       ...skill,
       metadata,
       operationalSlug,
-      kind: metadata.agent_kind === "linksubdot" ? "LINKSUBDOT" : metadata.agent_kind === "linkdot" || metadata.dot_slug ? "LINKDOT" : "AGENTE",
+      kind: skill.slug === "link-director"
+        ? "LINK DIRECTOR"
+        : metadata.agent_kind === "linksubdot"
+          ? "LINKSUBDOT"
+          : metadata.agent_kind === "linkdot" || metadata.dot_slug
+            ? "LINKDOT"
+            : "AGENTE",
     },
     workspaces,
+    workspaceAccess: workspaceAccessRows ?? [],
     subdots: subdotsResult.data ?? [],
     artifacts: artifactsResult.data ?? [],
     missions,
