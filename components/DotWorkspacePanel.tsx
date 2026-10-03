@@ -9,6 +9,7 @@ type DotData = {
   agent: Row;
   workspaces: Row[];
   workspaceAccess: Row[];
+  dotDirectory: Row[];
   subdots: Row[];
   artifacts: Row[];
   missions: Row[];
@@ -185,6 +186,25 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
             </button>
           ))}
         </nav>
+
+        <div className={styles.organism}>
+          <small>ORGANISMO</small>
+          <div>
+            {data.dotDirectory.map((dot) => (
+              <a
+                key={dot.slug}
+                href={`/dots/${dot.slug}`}
+                className={dot.slug === agent.operationalSlug || dot.technicalSlug === agent.slug ? styles.currentDot : ""}
+              >
+                <i className={stateTone(dot.status)} />
+                <span>
+                  <b>{dot.name}</b>
+                  <em>{dot.area}</em>
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
 
         <div className={styles.sidebarFoot}>
           <small>IDENTIDAD OPERACIONAL</small>
