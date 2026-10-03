@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 type PulseNode = {
   key: string;
@@ -82,7 +82,7 @@ export default function LinkPulseButton() {
               <span className="link-pulse-line" />
               <span className="link-pulse-wave" />
               {previewNodes.map((node, index) => (
-                <div className={"link-pulse-node is-" + node.status} key={node.key} style={{ "--pulse-index": index } as React.CSSProperties}>
+                <div className={"link-pulse-node is-" + node.status} key={node.key} style={{ "--pulse-index": index } as CSSProperties}>
                   <span className="link-pulse-dot" />
                   <b>{node.label}</b>
                   <small>{running ? "Rastreando…" : node.detail}</small>
