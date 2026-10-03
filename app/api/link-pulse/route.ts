@@ -246,7 +246,6 @@ export async function POST(request: NextRequest) {
       dedupe_key: `link_pulse:${scanId}`,
       payload: analysisMaterial,
       occurred_at: completedAt,
-      gesture_code: `link-pulse-${scanId.slice(0, 8)}`,
     })
     .select("id")
     .single();
