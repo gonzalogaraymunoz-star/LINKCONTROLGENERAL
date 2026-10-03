@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AgentActionConsole from "@/components/AgentActionConsole";
+import MarketingPersistencePanel from "@/components/MarketingPersistencePanel";
 
 export type AgentCapability = {
   capability_key: string;
@@ -868,6 +869,8 @@ function AgentFicha({ agent, agents, summary }: { agent: AgentRecord; agents: Ag
             {!parameters.length && <Empty text="Este agente no tiene parámetros de etapa definidos." />}
           </div>
         </section>
+
+        {(agent.metadata?.stage_key === "marketing" || operationalSlug === "linkdot-marketing-rrss") ? <MarketingPersistencePanel /> : null}
 
         <AgentActionConsole
           agentSlug={agent.slug}
