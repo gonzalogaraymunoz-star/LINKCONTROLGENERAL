@@ -46,10 +46,30 @@ async function loadDot(slug: string) {
       .limit(1);
     skill = candidates?.[0] ?? null;
   }
+
+  // Some LINKDOT workspaces already exist before their legacy stage director
+  // has been upgraded with agent_kind/dot_slug metadata. Resolve that bridge
+  // from the canonical workspace so the panel works during the migration.
+  if (!skill && slug.startsWith("linkdot-")) {
+    const { data: workspaceBridge } = await supabase
+      .from("link_dot_workspaces")
+      .select("owner_director_slug")
+      .eq("owner_linkdot_slug", slug)
+      .limit(1)
+      .maybeSingle();
+    if (workspaceBridge?.owner_director_slug) {
+      const { data: bridgedSkill } = await supabase
+        .from("link_skills")
+        .select(skillSelect)
+        .eq("slug", workspaceBridge.owner_director_slug)
+        .maybeSingle();
+      skill = bridgedSkill ?? null;
+    }
+  }
   if (!skill) return null;
 
   const metadata = metaOf(skill.metadata);
-  const operationalSlug = String(metadata.dot_slug || skill.slug);
+  const operationalSlug = String(metadata.dot_slug || (slug.startsWith("linkdot-") ? slug : skill.slug));
   const dotSlugs = Array.from(new Set([skill.slug, operationalSlug]));
 
   const [
