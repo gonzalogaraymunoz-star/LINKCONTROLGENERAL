@@ -35,7 +35,7 @@ export async function GET() {
 
   const { data: business } = await supabase
     .from("link_world_businesses")
-    .select("id,name,status,global_id")
+    .select("id,name,slug,sector,city,country,verification_status,global_id")
     .eq("id", plan.business_id)
     .maybeSingle();
 
@@ -50,7 +50,7 @@ export async function GET() {
       .from("link_rrss_profiles")
       .select("id,name,slug,status")
       .eq("business_id", plan.business_id)
-      .neq("status", "paused")
+      .eq("status", "active")
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -122,6 +122,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     business,
+    profile,
     plan,
     brief: briefResult.data || null,
     tasks,
