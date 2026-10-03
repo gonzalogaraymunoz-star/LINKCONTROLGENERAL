@@ -238,10 +238,10 @@ export async function POST(request: NextRequest) {
     .from("event_bus")
     .insert({
       control_id: ROOT_CONTROL_ID,
-      source_provider: "control-central",
+      source_provider: "link-pulse",
       event_type: "system.link_pulse.completed",
       entity_type: "system",
-      global_id: "agent:link-director",
+      global_id: null,
       correlation_id: scanId,
       dedupe_key: `link_pulse:${scanId}`,
       payload: analysisMaterial,
