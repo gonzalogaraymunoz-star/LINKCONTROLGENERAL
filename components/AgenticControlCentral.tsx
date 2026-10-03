@@ -229,6 +229,8 @@ export default function AgenticControlCentral({
       if (storedSection && NAV.some((item) => item.id === storedSection)) setSection(storedSection);
       const storedAgent = window.localStorage.getItem("link-control-agent");
       if (storedAgent && initialAgents.some((item) => item.id === storedAgent)) setSelectedAgent(storedAgent);
+      const storedSidebar = window.localStorage.getItem("link-control-sidebar-collapsed");
+      if (storedSidebar === "true") setCollapsed(true);
     } catch {
       // Local persistence is optional; Supabase remains the source of truth.
     }
@@ -237,6 +239,10 @@ export default function AgenticControlCentral({
   useEffect(() => {
     try { window.localStorage.setItem("link-control-section", section); } catch {}
   }, [section]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem("link-control-sidebar-collapsed", String(collapsed)); } catch {}
+  }, [collapsed]);
 
   useEffect(() => {
     if (!selectedAgent) return;
@@ -297,60 +303,62 @@ export default function AgenticControlCentral({
           </button>
         </div>
 
-        <nav className="agentic-nav" aria-label="Secciones de CONTROL CENTRAL">
-          {NAV.map((item) => (
-            <button
-              key={item.id}
-              className={section === item.id ? "is-active" : ""}
-              onClick={() => go(item.id)}
-              title={collapsed ? item.id : undefined}
-            >
-              <Icon name={item.icon} />
-              <span>
-                <b>{item.id}</b>
-                <small>{item.hint}</small>
-              </span>
-            </button>
-          ))}
-          <a
-            className="agentic-guide-link"
-            href="/linkguide"
-            title={collapsed ? "LINK Guide" : undefined}
-          >
-            <Icon name="grid" />
-            <span>
-              <b>LINK Guide</b>
-              <small>Mapa y direcciones</small>
-            </span>
-          </a>
-        </nav>
-
-        <div className="agentic-sidebar-section">
-          <div className="agentic-sidebar-label">LINKDOTS</div>
-          {initialAgents.length ? (
-            initialAgents.map((item) => (
+        <div className="agentic-sidebar-scroll">
+          <nav className="agentic-nav" aria-label="Secciones de CONTROL CENTRAL">
+            {NAV.map((item) => (
               <button
                 key={item.id}
-                className={
-                  "agentic-agent-nav" +
-                  (section === "Agentes" && selectedAgent === item.id ? " is-active" : "")
-                }
-                onClick={() => {
-                  setSelectedAgent(item.id);
-                  go("Agentes");
-                }}
-                title={collapsed ? item.name : undefined}
+                className={section === item.id ? "is-active" : ""}
+                onClick={() => go(item.id)}
+                title={collapsed ? item.id : undefined}
               >
-                <span className="live-dot" />
+                <Icon name={item.icon} />
                 <span>
-                  <b>{item.name}</b>
-                  <small>{humanStatus(item.runtimeState?.mode || item.metadata?.autonomy_mode)}</small>
+                  <b>{item.id}</b>
+                  <small>{item.hint}</small>
                 </span>
               </button>
-            ))
-          ) : (
-            <div className="agentic-empty-mini">Sin agentes registrados</div>
-          )}
+            ))}
+            <a
+              className="agentic-guide-link"
+              href="/linkguide"
+              title={collapsed ? "LINK Guide" : undefined}
+            >
+              <Icon name="grid" />
+              <span>
+                <b>LINK Guide</b>
+                <small>Mapa y direcciones</small>
+              </span>
+            </a>
+          </nav>
+
+          <div className="agentic-sidebar-section">
+            <div className="agentic-sidebar-label">LINKDOTS</div>
+            {initialAgents.length ? (
+              initialAgents.map((item) => (
+                <button
+                  key={item.id}
+                  className={
+                    "agentic-agent-nav" +
+                    (section === "Agentes" && selectedAgent === item.id ? " is-active" : "")
+                  }
+                  onClick={() => {
+                    setSelectedAgent(item.id);
+                    go("Agentes");
+                  }}
+                  title={collapsed ? item.name : undefined}
+                >
+                  <span className="live-dot" />
+                  <span>
+                    <b>{item.name}</b>
+                    <small>{humanStatus(item.runtimeState?.mode || item.metadata?.autonomy_mode)}</small>
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className="agentic-empty-mini">Sin agentes registrados</div>
+            )}
+          </div>
         </div>
 
         <div className="agentic-sidebar-footer">
