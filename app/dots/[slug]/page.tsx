@@ -94,6 +94,7 @@ async function loadDot(slug: string) {
     eventsResult,
     sessionsResult,
     cronResult,
+    dotDirectoryResult,
   ] = await Promise.all([
     supabase
       .from("link_dot_workspaces")
@@ -163,6 +164,11 @@ async function loadDot(slug: string) {
       .neq("status", "archived")
       .order("updated_at", { ascending: false })
       .limit(80),
+    supabase
+      .from("link_skills")
+      .select("slug,name,status,metadata")
+      .eq("status", "active")
+      .order("name"),
   ]);
 
   const workspaceById = new Map<string, AnyRow>();
@@ -232,6 +238,27 @@ async function loadDot(slug: string) {
 
   const crons = (cronResult.data ?? []).filter((row: AnyRow) => belongsToDot(row, dotSlugs));
 
+  const dotDirectory = (dotDirectoryResult.data ?? [])
+    .filter((row: AnyRow) => {
+      const rowMeta = metaOf(row.metadata);
+      return row.slug === "link-director" || rowMeta.agent_kind === "linkdot";
+    })
+    .map((row: AnyRow) => {
+      const rowMeta = metaOf(row.metadata);
+      return {
+        slug: rowMeta.dot_slug || row.slug,
+        technicalSlug: row.slug,
+        name: rowMeta.display_label || row.name,
+        area: rowMeta.dot_area || rowMeta.stage_label || "Dirección",
+        status: row.status,
+      };
+    })
+    .sort((a: AnyRow, b: AnyRow) => {
+      if (a.technicalSlug === "link-director") return -1;
+      if (b.technicalSlug === "link-director") return 1;
+      return String(a.name).localeCompare(String(b.name), "es");
+    });
+
   return {
     agent: {
       ...skill,
@@ -247,6 +274,7 @@ async function loadDot(slug: string) {
     },
     workspaces,
     workspaceAccess: workspaceAccessRows ?? [],
+    dotDirectory,
     subdots: subdotsResult.data ?? [],
     artifacts: artifactsResult.data ?? [],
     missions,
