@@ -8,6 +8,7 @@ type Row = Record<string, any>;
 type DotData = {
   agent: Row;
   workspaces: Row[];
+  workspaceAccess: Row[];
   subdots: Row[];
   artifacts: Row[];
   missions: Row[];
@@ -111,7 +112,8 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("inicio");
   const agent = data.agent;
   const metadata = agent.metadata || {};
-  const initials = String(agent.name || agent.slug || "DT")
+  const displayName = String(metadata.display_label || agent.name || agent.slug || "DOT");
+  const initials = displayName
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -133,6 +135,11 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
   const workspaceMap = useMemo(
     () => new Map(data.workspaces.map((workspace) => [workspace.id, workspace])),
     [data.workspaces],
+  );
+
+  const workspaceAccessMap = useMemo(
+    () => new Map(data.workspaceAccess.map((access) => [access.workspace_id, access])),
+    [data.workspaceAccess],
   );
 
   const sessionMessages = useMemo(() => {
@@ -159,7 +166,7 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
         <div className={styles.identity}>
           <div className={styles.avatar}>{initials}</div>
           <small>{agent.kind}</small>
-          <h1>{agent.name}</h1>
+          <h1>{displayName}</h1>
           <p>{metadata.dot_area || metadata.area || metadata.stage_label || "LINK"}</p>
           <Status value={agent.status} />
         </div>
@@ -204,7 +211,7 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
               <section className={styles.hero}>
                 <div>
                   <span className={styles.kicker}>{agent.kind} · {agent.operationalSlug}</span>
-                  <h1>{agent.name}</h1>
+                  <h1>{displayName}</h1>
                   <p>{agent.description}</p>
                   <div className={styles.heroTags}>
                     <span>Responsabilidad: {metadata.responsibility || "definida por su misión"}</span>
@@ -244,7 +251,7 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
                 <section className={styles.card}>
                   <SectionTitle eyebrow="CUERPO DEL DOT" title="Arquitectura viva" note="La ficha se arma desde Supabase, no desde datos simulados." />
                   <div className={styles.architecture}>
-                    <div><b>Identidad</b><span>{agent.name}</span></div>
+                    <div><b>Identidad</b><span>{displayName}</span></div>
                     <div><b>Espacios</b><span>{data.workspaces.length} autorizados</span></div>
                     <div><b>Artefactos</b><span>{data.artifacts.length} piezas de trabajo</span></div>
                     <div><b>Memoria</b><span>{data.memories.length} registros vivos</span></div>
@@ -332,6 +339,12 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
                     <div className={styles.workspaceMeta}>
                       <code>{workspace.workspace_key}</code>
                       <Status value={workspace.status} />
+                      {workspaceAccessMap.get(workspace.id) ? (
+                        <span className={styles.chip}>
+                          {workspaceAccessMap.get(workspace.id)?.access_level}
+                          {workspaceAccessMap.get(workspace.id)?.is_default ? " · principal" : ""}
+                        </span>
+                      ) : null}
                       {workspace.route ? <a href={workspace.route} target="_blank" rel="noreferrer">Abrir espacio ↗</a> : null}
                     </div>
                     <h3 className={styles.subheading}>LINKSUBDOTS</h3>
