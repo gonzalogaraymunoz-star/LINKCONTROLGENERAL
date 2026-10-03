@@ -143,3 +143,22 @@ La fuente de verdad operacional sigue viviendo en los sistemas propietarios; la 
 La herramienta no es el agente.
 
 LINKRRSS, Supabase, Vercel, GitHub y los conectores son capacidades. LINKDOT es quien mantiene la responsabilidad y decide qué capacidad utilizar dentro de sus límites.
+
+
+## Persistencia comercial MAR
+
+MAR conserva dos capas adicionales:
+
+- `link_marketing_briefs`: ficha persistente de producto/campaña, audiencia, beneficio, anzuelo, oferta, presupuesto y regla de captura.
+- `link_marketing_learnings`: hallazgos, decisiones, métricas y evidencia que deben sobrevivir al cierre de una conversación.
+
+La ficha del LINKDOT muestra el plan mensual real, trabajo verificado, publicaciones reales, brief vigente, aprendizaje y la puerta de handoff hacia BEL.
+
+### Regla de handoff MAR → BEL
+
+Un registro solo puede avanzar cuando cumple ambas condiciones:
+
+1. identidad natural identificable;
+2. al menos un punto de contacto válido.
+
+Un identificador técnico, código o perfil sin forma de contacto no cuenta como lead elegible.
