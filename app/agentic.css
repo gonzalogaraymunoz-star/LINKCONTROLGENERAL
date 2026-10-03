@@ -570,3 +570,48 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .guide-projection-list article{grid-template-columns:1fr;gap:5px}
   .guide-footer{flex-direction:column;gap:4px}
 }
+
+
+/* LINKDOT MAR · persistencia comercial */
+.mar-persistence{display:grid;gap:18px}
+.mar-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.mar-head h2{margin:4px 0 6px;font-size:28px;letter-spacing:-.03em}
+.mar-head p{margin:0;max-width:760px;color:var(--muted,#6f716d)}
+.mar-head .state-pill.is-warning{background:#f0ece2;color:#5f5444}
+.mar-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.mar-metrics>div{padding:16px 17px;border:1px solid var(--line,#dedbd2);border-radius:18px;background:rgba(255,255,255,.42)}
+.mar-metrics strong{display:block;font-size:26px;letter-spacing:-.04em}
+.mar-metrics span{font-size:12px;color:var(--muted,#777)}
+.mar-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.mar-card{min-width:0;padding:18px;border:1px solid var(--line,#dedbd2);border-radius:20px;background:rgba(255,255,255,.32)}
+.mar-card.span-two{grid-column:span 2}
+.mar-card>small{display:block;font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--muted,#787a75);margin-bottom:8px}
+.mar-card h3{margin:0 0 9px;font-size:18px;letter-spacing:-.02em}
+.mar-card p{margin:0;color:var(--muted,#666963);line-height:1.55}
+.mar-card dl{display:grid;gap:0;margin:14px 0 0}
+.mar-card dl>div{display:grid;grid-template-columns:120px 1fr;gap:12px;padding:9px 0;border-top:1px solid var(--line,#e1ded5)}
+.mar-card dt{font-size:12px;color:var(--muted,#777)}
+.mar-card dd{margin:0;font-size:13px;font-weight:650;text-align:right}
+.mar-task-list{display:grid;gap:2px}
+.mar-task-list>div{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line,#e1ded5)}
+.mar-task-list>div:first-child{border-top:0}
+.mar-task-list small{font-size:11px;color:var(--muted,#777)}
+.mar-learning-list{display:grid;gap:12px}
+.mar-learning-list>div{padding-top:11px;border-top:1px solid var(--line,#e1ded5)}
+.mar-learning-list>div:first-child{padding-top:0;border-top:0}
+.mar-learning-list b{font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.mar-learning-list p{margin:5px 0}
+.mar-learning-list small{display:block;line-height:1.4;color:var(--muted,#777)}
+.mar-blocked,.mar-ready{display:block;margin-top:14px;padding:10px 12px;border-radius:14px;font-size:12px}
+.mar-blocked{background:#f0ece2;color:#5f5444}
+.mar-ready{background:#e9eee9;color:#3e5142}
+@media(max-width:820px){
+  .mar-head{flex-direction:column}
+  .mar-metrics{grid-template-columns:1fr 1fr}
+  .mar-grid{grid-template-columns:1fr}
+  .mar-card.span-two{grid-column:auto}
+  .mar-card dl>div{grid-template-columns:1fr}
+  .mar-card dd{text-align:left}
+  .mar-task-list>div{grid-template-columns:14px 1fr}
+  .mar-task-list small{grid-column:2}
+}
