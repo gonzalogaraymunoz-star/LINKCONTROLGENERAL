@@ -85,7 +85,7 @@ export async function GET() {
       .from("link_rrss_sources")
       .select("id,provider,status,last_synced_at")
       .eq("profile_id", profile.id)
-      .eq("status", "connected");
+      .neq("status", "disconnected");
 
     const sourceIds = (sources || []).map((item: any) => item.id);
     if (sourceIds.length) {
