@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AgentActionConsole from "@/components/AgentActionConsole";
+import LinkPulseButton from "@/components/LinkPulseButton";
 
 export type AgentCapability = {
   capability_key: string;
@@ -383,10 +384,13 @@ export default function AgenticControlCentral({
             <small>CONTROL CENTRAL / LINKDOT OS</small>
             <b>{section}</b>
           </div>
-          <button className="sync-button" onClick={() => void loadSummary()} disabled={loading}>
-            <Icon name="refresh" />
-            <span>{loading ? "Leyendo…" : "Sincronizar"}</span>
-          </button>
+          <div className="agentic-top-actions">
+            <LinkPulseButton />
+            <button className="sync-button" onClick={() => void loadSummary()} disabled={loading}>
+              <Icon name="refresh" />
+              <span>{loading ? "Leyendo…" : "Sincronizar"}</span>
+            </button>
+          </div>
         </header>
 
         <div className="agentic-canvas">
