@@ -3,7 +3,11 @@ import { z } from "zod";
 import { getCentralSupabase } from "@/lib/supabase/server";
 
 const ROOT_CONTROL_ID = "00000000-0000-0000-0000-000000000001";
-const MODEL = process.env.LINK_AGENT_MODEL || "poolside/laguna-s-2.1-free";
+const MODEL = process.env.LINK_AGENT_MODEL || "openai/gpt-5.6-sol";
+const FALLBACK_MODELS = (process.env.LINK_AGENT_FALLBACK_MODELS || "google/gemini-3.6-flash,anthropic/claude-sonnet-5")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const INTERNAL_ACTIONS = new Set([
   "stage.diagnosis.record",
@@ -684,6 +688,11 @@ export async function wakeAgent(input: WakeInput) {
     prompt:
       "Evaluate this LINK wake context and make one governed decision. Context JSON follows:\n" +
       JSON.stringify(context),
+    providerOptions: {
+      gateway: {
+        models: FALLBACK_MODELS,
+      },
+    },
     timeout: { totalMs: 100_000, stepMs: 90_000 },
   });
 
