@@ -798,6 +798,9 @@ function AgentFicha({ agent, agents, summary }: { agent: AgentRecord; agents: Ag
         <div className="agent-ficha-state">
           <span><i className="live-dot" />{humanStatus(agent.status)}</span>
           <b>{humanStatus(runtime?.mode || agent.metadata?.autonomy_mode)}</b>
+          <a className="sync-button" href={`/dots/${operationalSlug}`}>
+            Abrir panel del DOT →
+          </a>
           <a className="sync-button" href="https://link-world-delta.vercel.app/?space=micelio&view=processes" target="_blank" rel="noopener noreferrer">
             Ver en Micelio ↗
           </a>
