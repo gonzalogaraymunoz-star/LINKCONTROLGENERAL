@@ -192,7 +192,7 @@ export async function GET() {
     return false;
   });
 
-  const stories = relevantEvents.slice(0, 24).map((event: Row) => {
+  const rawStories = relevantEvents.slice(0, 40).map((event: Row) => {
     const payload = event.payload || {};
     const agentSlug = payload.agent_slug || eventRoute(String(event.event_type || ""), String(event.source_provider || ""));
     const actor = actorMap.get(agentSlug) || {
@@ -310,6 +310,18 @@ export async function GET() {
       href: `/dots/${actor.dotSlug}`,
     };
   });
+
+  const stories: Row[] = [];
+  const seenStories = new Map<string, number>();
+  for (const story of rawStories) {
+    const at = story.at ? new Date(story.at).getTime() : 0;
+    const signature = `${story.actor}|${story.headline}`;
+    const previous = seenStories.get(signature);
+    if (previous && at && Math.abs(previous - at) < 45 * 60 * 1000) continue;
+    seenStories.set(signature, at || Date.now());
+    stories.push(story);
+    if (stories.length >= 24) break;
+  }
 
   const lastWakeAt = actorStates
     .map((row: Row) => row.lastWakeAt)
