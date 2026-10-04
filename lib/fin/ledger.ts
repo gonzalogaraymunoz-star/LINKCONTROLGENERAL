@@ -83,6 +83,34 @@ export async function recordFinCheckoutCreated(input: FinCheckoutRecord) {
   return { recorded: true, eventId: event?.id || null };
 }
 
+export async function resolveFinPaymentRoute(businessId: string, currency = "CLP") {
+  const supabase = getCentralSupabase();
+  if (!supabase) return { route: null, error: "supabase_not_configured" };
+
+  const { data: business, error: businessError } = await supabase
+    .from("fin_businesses")
+    .select("business_key,display_name,active")
+    .eq("business_key", businessId)
+    .maybeSingle();
+
+  if (businessError) return { route: null, error: businessError.message };
+  if (!business || !business.active) return { route: null, error: "business_not_configured" };
+
+  const { data: route, error: routeError } = await supabase
+    .from("fin_business_payment_routes")
+    .select("id,business_key,method_type,provider,label,account_ref,currency,enabled,priority,reconciliation_mode,metadata")
+    .eq("business_key", businessId)
+    .eq("currency", currency.toUpperCase())
+    .eq("enabled", true)
+    .order("priority", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (routeError) return { route: null, error: routeError.message };
+  if (!route) return { route: null, error: "no_payment_route_configured" };
+  return { route, business, error: null };
+}
+
 export async function readFinMemory(limit = 50) {
   const supabase = getCentralSupabase();
   if (!supabase) {
