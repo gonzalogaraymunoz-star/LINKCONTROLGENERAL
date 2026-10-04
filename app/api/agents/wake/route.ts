@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
       workType: work.work_type || null,
       workReason: work.reason || null,
       missionId: work.mission_id || null,
+      workMetadata: work.metadata || null,
     });
 
     const decision = result?.decision || null;
