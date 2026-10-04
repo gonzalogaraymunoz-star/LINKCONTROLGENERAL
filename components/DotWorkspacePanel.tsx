@@ -27,12 +27,12 @@ type DotData = {
 };
 
 const TABS = [
-  ["hoy", "Hoy"],
-  ["espacios", "Espacios"],
+  ["inicio", "Inicio"],
+  ["trabajo", "Mi trabajo"],
+  ["espacios", "Mis espacios"],
+  ["equipo", "Mi equipo"],
   ["conversaciones", "Conversaciones"],
-  ["subdots", "Subdots"],
-  ["mision", "Misión"],
-  ["mas", "Más"],
+  ["detalles", "Detalles"],
 ] as const;
 
 type TabId = (typeof TABS)[number][0];
@@ -52,11 +52,9 @@ function fmt(value?: string | null) {
 function human(value?: string | null) {
   const map: Record<string, string> = {
     active: "Activo",
-    shadow: "Shadow",
     live: "En vivo",
     paused: "Pausado",
     draft: "Borrador",
-    archived: "Archivado",
     pending: "Pendiente",
     processing: "Procesando",
     completed: "Completado",
@@ -66,16 +64,16 @@ function human(value?: string | null) {
     cancelled: "Cancelado",
     failed: "Falló",
     blocked: "Bloqueado",
-    waiting_approval: "Espera aprobación",
+    waiting_approval: "Esperando aprobación",
     proposed: "Propuesto",
     accepted: "Aceptado",
-    consumed: "Consumido",
-    requested: "Solicitada",
-    received: "Recibida",
-    validated: "Validada",
+    consumed: "Recibido",
+    requested: "Solicitado",
+    received: "Recibido",
+    validated: "Validado",
     connected: "Conectado",
-    attention: "Atención",
-    building: "Construyendo",
+    attention: "Necesita atención",
+    building: "En construcción",
   };
   return map[String(value || "")] || value || "—";
 }
@@ -96,31 +94,13 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <div className={styles.empty}>{children}</div>;
 }
 
-function isToday(value?: string | null) {
-  if (!value) return false;
-  const d = new Date(value);
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  );
-}
-
 export default function DotWorkspacePanel({ data }: { data: DotData }) {
-  const [tab, setTab] = useState<TabId>("hoy");
+  const [tab, setTab] = useState<TabId>("inicio");
   const agent = data.agent;
   const metadata = agent.metadata || {};
   const displayName = String(metadata.display_label || agent.name || agent.slug || "DOT");
+  const shortName = displayName.replace(/^LINKDOT\s*·?\s*/i, "").replace(/^LINK\s*/i, "");
   const area = String(metadata.dot_area || metadata.area || metadata.stage_label || "LINK");
-  const initials = displayName
-    .replace(/^LINKDOT\s*·?\s*/i, "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
 
   const workspaceMap = useMemo(
     () => new Map(data.workspaces.map((workspace) => [workspace.id, workspace])),
@@ -145,154 +125,98 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
   const activeMissions = data.missions.filter(
     (mission) => !["completed", "cancelled", "archived"].includes(String(mission.status)),
   );
-  const activeMission = activeMissions[0] || data.missions[0] || null;
-  const blockedMissions = activeMissions.filter((m) => String(m.status) === "blocked");
+  const activeMission = activeMissions[0] || null;
+
   const pendingApprovals = data.commands.filter(
     (command) =>
       command.requires_approval &&
       !["approved", "rejected"].includes(String(command.approval_status)),
   );
-  const pendingHandoffs = data.handoffs.filter((handoff) =>
-    ["proposed", "requested", "pending"].includes(String(handoff.status)),
-  );
+  const blockedMissions = activeMissions.filter((mission) => String(mission.status) === "blocked");
   const blockedHandoffs = data.handoffs.filter((handoff) => String(handoff.status) === "blocked");
-  const queuedCommands = data.commands.filter((command) => String(command.status) === "pending");
   const attentionArtifacts = data.artifacts.filter((artifact) =>
     ["attention", "building"].includes(String(artifact.status)),
   );
-  const pendingEvidence = data.evidence.filter(
-    (item) => !["validated", "rejected"].includes(String(item.status)),
-  );
   const failedCommands = data.commands.filter((command) => String(command.status) === "failed");
-  const validatedToday = data.evidence.filter(
-    (item) => item.status === "validated" && isToday(item.validated_at || item.received_at),
-  ).length;
-  const completedToday = data.missions.filter(
-    (mission) => mission.status === "completed" && isToday(mission.updated_at),
-  ).length;
-  const successfulToday = data.commands.filter(
-    (command) =>
-      ["completed", "success", "succeeded"].includes(String(command.status)) &&
-      isToday(command.processed_at || command.requested_at),
-  ).length;
-  const resolvedToday = validatedToday + completedToday + successfulToday;
 
-  const pulseScore = Math.max(
-    20,
-    Math.min(
-      100,
-      100 -
-        blockedMissions.length * 15 -
-        pendingApprovals.length * 8 -
-        failedCommands.length * 10 -
-        attentionArtifacts.length * 6 -
-        blockedHandoffs.length * 12 -
-        pendingHandoffs.length * 5 -
-        Math.min(pendingEvidence.length, 5) * 2,
-    ),
-  );
+  const needsYou = [
+    ...blockedMissions.map((mission) => ({
+      title: "Hay una tarea bloqueada",
+      detail: mission.title,
+      tab: "trabajo" as TabId,
+    })),
+    ...pendingApprovals.map((command) => ({
+      title: "Necesito una aprobación",
+      detail: command.action_key || command.command_type || "Hay una acción esperando tu decisión.",
+      tab: "detalles" as TabId,
+    })),
+    ...blockedHandoffs.map((handoff) => ({
+      title: "Una entrega entre actores está bloqueada",
+      detail: handoff.summary || "Revisa la entrega de trabajo entre LINKDOT.",
+      tab: "trabajo" as TabId,
+    })),
+    ...failedCommands.map((command) => ({
+      title: "Una acción no resultó",
+      detail: command.action_key || command.command_type || "Revisa la acción fallida.",
+      tab: "detalles" as TabId,
+    })),
+    ...attentionArtifacts.map((artifact) => ({
+      title: "Un artefacto necesita atención",
+      detail: artifact.name,
+      tab: "espacios" as TabId,
+    })),
+  ].slice(0, 4);
 
-  const pulseText =
-    pulseScore >= 85
-      ? "operación estable"
-      : pulseScore >= 65
-        ? "requiere atención"
-        : "carga crítica";
+  const technicalToLabel = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const dot of data.dotDirectory) {
+      map.set(String(dot.slug), String(dot.name));
+      map.set(String(dot.technicalSlug), String(dot.name));
+    }
+    map.set(String(agent.slug), displayName);
+    map.set(String(agent.operationalSlug), displayName);
+    return map;
+  }, [data.dotDirectory, agent.slug, agent.operationalSlug, displayName]);
 
-  const focusItems = useMemo(() => {
-    const items: Array<{ title: string; detail: string; tab: TabId; level: "high" | "mid" | "low" }> = [];
-    if (blockedMissions.length) {
-      items.push({
-        title: `${blockedMissions.length} misión${blockedMissions.length === 1 ? "" : "es"} bloqueada${blockedMissions.length === 1 ? "" : "s"}`,
-        detail: blockedMissions[0]?.title || "Requiere intervención",
-        tab: "mision",
-        level: "high",
-      });
-    }
-    if (pendingApprovals.length) {
-      items.push({
-        title: `${pendingApprovals.length} aprobación${pendingApprovals.length === 1 ? "" : "es"} pendiente${pendingApprovals.length === 1 ? "" : "s"}`,
-        detail: pendingApprovals[0]?.action_key || pendingApprovals[0]?.command_type || "Acción esperando decisión",
-        tab: "mas",
-        level: "high",
-      });
-    }
-    if (blockedHandoffs.length) {
-      items.push({
-        title: `${blockedHandoffs.length} handoff${blockedHandoffs.length === 1 ? "" : "s"} bloqueado${blockedHandoffs.length === 1 ? "" : "s"}`,
-        detail: blockedHandoffs[0]?.summary || `${blockedHandoffs[0]?.from_agent_slug || "DOT"} → ${blockedHandoffs[0]?.to_agent_slug || "siguiente DOT"}`,
-        tab: "mision",
-        level: "high",
-      });
-    }
-    if (pendingHandoffs.length) {
-      items.push({
-        title: `${pendingHandoffs.length} handoff${pendingHandoffs.length === 1 ? "" : "s"} por resolver`,
-        detail: pendingHandoffs[0]?.summary || `${pendingHandoffs[0]?.from_agent_slug || "DOT"} → ${pendingHandoffs[0]?.to_agent_slug || "siguiente DOT"}`,
-        tab: "mision",
-        level: "mid",
-      });
-    }
-    if (queuedCommands.length) {
-      items.push({
-        title: `${queuedCommands.length} acción${queuedCommands.length === 1 ? "" : "es"} en cola`,
-        detail: queuedCommands[0]?.action_key || queuedCommands[0]?.command_type || "Acción pendiente de procesamiento",
-        tab: "mas",
-        level: "mid",
-      });
-    }
-    if (attentionArtifacts.length) {
-      items.push({
-        title: `${attentionArtifacts.length} artefacto${attentionArtifacts.length === 1 ? "" : "s"} en atención`,
-        detail: attentionArtifacts[0]?.name || "Revisar artefactos activos",
-        tab: "espacios",
-        level: "mid",
-      });
-    }
-    if (data.sessions.length) {
-      items.push({
-        title: `${data.sessions.length} conversación${data.sessions.length === 1 ? "" : "es"} persistente${data.sessions.length === 1 ? "" : "s"}`,
-        detail: data.sessions[0]?.title || "Contexto conversacional disponible",
-        tab: "conversaciones",
-        level: "low",
-      });
-    }
-    if (!items.length && activeMission) {
-      items.push({
-        title: "Misión activa",
-        detail: activeMission.title,
-        tab: "mision",
-        level: "low",
-      });
-    }
-    return items.slice(0, 4);
-  }, [
-    blockedMissions,
-    pendingApprovals,
-    blockedHandoffs,
-    pendingHandoffs,
-    queuedCommands,
-    attentionArtifacts,
-    data.sessions,
-    activeMission,
-  ]);
+  const inbound = data.handoffs.find((handoff) => handoff.to_agent_slug === agent.slug);
+  const outbound = data.handoffs.find((handoff) => handoff.from_agent_slug === agent.slug);
 
-  const nextMove = focusItems[0] || null;
-  const currentPending =
-    blockedMissions.length +
-    pendingApprovals.length +
-    blockedHandoffs.length +
-    pendingHandoffs.length +
-    queuedCommands.length +
-    attentionArtifacts.length +
-    pendingEvidence.length;
+  const receives =
+    metadata.entry_boundary ||
+    (inbound
+      ? inbound.summary ||
+        `Trabajo que llega desde ${technicalToLabel.get(String(inbound.from_agent_slug)) || inbound.from_agent_slug}`
+      : "Todavía no hay una entrada de trabajo definida.");
 
-  const characterLine =
-    metadata.workspace_phrase ||
-    metadata.personality_phrase ||
+  const does =
     metadata.responsibility ||
     agent.description ||
-    "DOT operativo del ecosistema LINK.";
+    "Todavía no hay una responsabilidad descrita en lenguaje común.";
+
+  const delivers =
+    metadata.exit_boundary ||
+    metadata.handoff_boundary ||
+    (outbound
+      ? outbound.summary ||
+        `Trabajo que continúa en ${technicalToLabel.get(String(outbound.to_agent_slug)) || outbound.to_agent_slug}`
+      : "Todavía no hay una entrega definida.");
+
+  const journeyOrder = [
+    "linkdot-marketing-rrss",
+    "linkdot-ventas",
+    "linkdot-cierre",
+    "linkdot-onboarding",
+    "linkdot-entrega",
+    "linkdot-postventa",
+  ];
+
+  const journeyDots = [...data.dotDirectory]
+    .filter((dot) => dot.technicalSlug !== "link-director" && dot.slug !== "link-director")
+    .sort((a, b) => {
+      const ai = journeyOrder.indexOf(String(a.slug));
+      const bi = journeyOrder.indexOf(String(b.slug));
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+    });
 
   const accentClass =
     area.includes("marketing")
@@ -314,465 +238,456 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
       <aside className={styles.sidebar}>
         <a className={styles.back} href="/">← Control Central</a>
 
-        <div className={styles.identity}>
-          <div className={styles.avatar}>{initials || "L·"}</div>
-          <small>{agent.kind}</small>
-          <h1>{displayName}</h1>
-          <p>{area.replaceAll("_", " ")}</p>
-          <Status value={metadata.runtime_state || agent.status} />
+        <div className={styles.sideBrand}>
+          <div className={styles.dotMark}><i /><i /><i /><i /></div>
+          <strong>LINKDOT</strong>
         </div>
 
-        <nav className={styles.nav} aria-label="Secciones del DOT">
-          {TABS.map(([id, label]) => (
-            <button
-              key={id}
-              className={tab === id ? styles.active : ""}
-              onClick={() => setTab(id)}
-            >
-              <span>{label}</span>
-              {id === "espacios" && data.workspaces.length ? <b>{data.workspaces.length}</b> : null}
-              {id === "conversaciones" && data.sessions.length ? <b>{data.sessions.length}</b> : null}
-              {id === "subdots" && data.subdots.length ? <b>{data.subdots.length}</b> : null}
-              {id === "mision" && activeMissions.length ? <b>{activeMissions.length}</b> : null}
-            </button>
-          ))}
-        </nav>
-
-        <div className={styles.organism}>
-          <small>ORGANISMO</small>
-          <div>
-            {data.dotDirectory.map((dot) => (
-              <a
-                key={dot.slug}
-                href={`/dots/${dot.slug}`}
-                className={
-                  dot.slug === agent.operationalSlug || dot.technicalSlug === agent.slug
-                    ? styles.currentDot
-                    : ""
-                }
-              >
-                <i className={tone(dot.status)} />
-                <span>
-                  <b>{dot.name}</b>
-                  <em>{dot.area}</em>
-                </span>
-              </a>
-            ))}
+        <div className={styles.sideSection}>
+          <div className={styles.sideLabel}>ACTORES</div>
+          <div className={styles.actorList}>
+            {data.dotDirectory.map((dot) => {
+              const current =
+                dot.slug === agent.operationalSlug || dot.technicalSlug === agent.slug;
+              return (
+                <a
+                  key={dot.slug}
+                  href={`/dots/${dot.slug}`}
+                  className={current ? styles.actorActive : ""}
+                >
+                  <span className={styles.actorDot} />
+                  <span>
+                    <b>{dot.name}</b>
+                    <small>{dot.area}</small>
+                  </span>
+                </a>
+              );
+            })}
           </div>
         </div>
 
-        <div className={styles.sidebarFoot}>
-          <small>FUENTE DE VERDAD</small>
-          <span>{metadata.source_of_truth || "supabase"}</span>
-          <code>{agent.operationalSlug}</code>
+        <div className={styles.sideSection}>
+          <div className={styles.sideLabel}>ESPACIOS</div>
+          <div className={styles.sideItems}>
+            {data.workspaces.slice(0, 5).map((workspace) => (
+              <button key={workspace.id} onClick={() => setTab("espacios")}>
+                <span>▢</span>
+                <b>{workspace.name}</b>
+              </button>
+            ))}
+            {!data.workspaces.length ? <small className={styles.sideEmpty}>Sin espacios todavía</small> : null}
+          </div>
+        </div>
+
+        <div className={styles.sideSection}>
+          <div className={styles.sideLabel}>CONVERSACIONES RECIENTES</div>
+          <div className={styles.sideItems}>
+            {data.sessions.slice(0, 4).map((session) => (
+              <button key={session.id} onClick={() => setTab("conversaciones")}>
+                <span>◌</span>
+                <b>{session.title || "Conversación sin título"}</b>
+              </button>
+            ))}
+            {!data.sessions.length ? <small className={styles.sideEmpty}>Sin conversaciones todavía</small> : null}
+          </div>
         </div>
       </aside>
 
       <main className={styles.main}>
         <header className={styles.topbar}>
-          <div>
-            <small>LINKDOT WORKSPACE / {agent.operationalSlug}</small>
-            <b>{TABS.find(([id]) => id === tab)?.[1]}</b>
-          </div>
-          <div className={styles.topActions}>
-            <Status value={metadata.autonomy_mode || agent.status} />
-            {metadata.runtime ? <span className={styles.chip}>{metadata.runtime}</span> : null}
-          </div>
+          <nav>
+            {TABS.map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                className={tab === id ? styles.tabActive : ""}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <Status value={metadata.runtime_state || agent.status} />
         </header>
 
         <div className={styles.canvas}>
-          {tab === "hoy" ? (
+          {tab === "inicio" ? (
             <>
               <section className={styles.hero}>
-                <div className={styles.heroMain}>
-                  <span className={styles.kicker}>{agent.kind} · HOY</span>
-                  <h1>{displayName}</h1>
-                  <p>{characterLine}</p>
-                  <div className={styles.heroTags}>
-                    {activeMissions.length ? <span>{activeMissions.length} misión(es) activa(s)</span> : null}
-                    {pendingApprovals.length ? <span>{pendingApprovals.length} por aprobar</span> : null}
-                    {data.subdots.length ? <span>{data.subdots.length} subdots</span> : null}
-                    {data.workspaces.length ? <span>{data.workspaces.length} espacio(s)</span> : null}
+                <div className={styles.heroCopy}>
+                  <span className={styles.eyebrow}>TU ACTOR EN LINK</span>
+                  <h1>Hola. Soy {shortName}.</h1>
+                  <p>{does}</p>
+                  <div className={styles.ready}>
+                    <span />
+                    {metadata.runtime_state === "paused" || agent.status === "paused"
+                      ? "Estoy pausado"
+                      : "Estoy operativo"}
                   </div>
                 </div>
-                <div className={styles.pulse}>
-                  <small>PULSO OPERATIVO</small>
-                  <strong>{pulseScore}%</strong>
-                  <span>{pulseText}</span>
-                  <div className={styles.pulseTrack}>
-                    <i style={{ width: `${pulseScore}%` }} />
+                <div className={styles.mascotWrap} aria-hidden="true">
+                  <span className={styles.spark}>✦</span>
+                  <div className={styles.mascot}>
+                    <div className={styles.mascotFace}>
+                      <i /><i />
+                    </div>
+                    <b>{shortName.slice(0, 2).toUpperCase()}</b>
                   </div>
-                  <em>
-                    Derivado de bloqueos, aprobaciones, fallos, handoffs, artefactos y evidencia pendientes.
-                  </em>
+                  <small>{area.replaceAll("_", " ")}</small>
                 </div>
               </section>
 
-              <div className={styles.todayGrid}>
-                <section className={styles.card}>
-                  <header className={styles.cardHead}>
+              <section className={styles.section}>
+                <header className={styles.sectionHead}>
+                  <div>
+                    <span className={styles.eyebrow}>ASÍ TRABAJO</span>
+                    <h2>Tres cosas para entender mi lugar</h2>
+                  </div>
+                  <p>No necesitas conocer la arquitectura para saber qué hago.</p>
+                </header>
+
+                <div className={styles.flow}>
+                  <article>
+                    <span className={styles.stepNumber}>1</span>
+                    <small>RECIBO</small>
+                    <h3>Lo que llega a mí</h3>
+                    <p>{receives}</p>
+                  </article>
+                  <div className={styles.flowArrow}>→</div>
+                  <article>
+                    <span className={styles.stepNumber}>2</span>
+                    <small>HAGO</small>
+                    <h3>Mi responsabilidad</h3>
+                    <p>{does}</p>
+                  </article>
+                  <div className={styles.flowArrow}>→</div>
+                  <article>
+                    <span className={styles.stepNumber}>3</span>
+                    <small>ENTREGO</small>
+                    <h3>Qué pasa después</h3>
+                    <p>{delivers}</p>
+                  </article>
+                </div>
+              </section>
+
+              <div className={styles.homeGrid}>
+                <section className={styles.section}>
+                  <header className={styles.sectionHead}>
                     <div>
-                      <small>NECESITA ATENCIÓN</small>
-                      <h2>Qué importa ahora</h2>
+                      <span className={styles.eyebrow}>AHORA</span>
+                      <h2>Qué tengo entre manos</h2>
                     </div>
-                    <span>{focusItems.length ? "señales reales" : "sin alertas"}</span>
                   </header>
-                  <div className={styles.focusList}>
-                    {focusItems.map((item, index) => (
-                      <button key={`${item.title}-${index}`} onClick={() => setTab(item.tab)}>
-                        <span className={`${styles.focusNumber} ${styles[item.level]}`}>
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <span>
-                          <b>{item.title}</b>
-                          <small>{item.detail}</small>
-                        </span>
+                  {activeMission ? (
+                    <article className={styles.currentTask}>
+                      <div>
+                        <Status value={activeMission.status} />
+                        <h3>{activeMission.title}</h3>
+                        <p>{activeMission.problem_statement || activeMission.diagnosis || "Esta misión no tiene una explicación adicional."}</p>
+                      </div>
+                      <button onClick={() => setTab("trabajo")}>Ver mi trabajo →</button>
+                    </article>
+                  ) : (
+                    <Empty>No tengo una misión activa registrada ahora.</Empty>
+                  )}
+                </section>
+
+                <section className={styles.section}>
+                  <header className={styles.sectionHead}>
+                    <div>
+                      <span className={styles.eyebrow}>NECESITO DE TI</span>
+                      <h2>{needsYou.length ? "Hay algo que revisar" : "Todo claro por ahora"}</h2>
+                    </div>
+                  </header>
+                  <div className={styles.needList}>
+                    {needsYou.map((item, index) => (
+                      <button key={index} onClick={() => setTab(item.tab)}>
+                        <span>{index + 1}</span>
+                        <div><b>{item.title}</b><small>{item.detail}</small></div>
                         <em>→</em>
                       </button>
                     ))}
-                    {!focusItems.length ? (
-                      <Empty>No hay señales críticas registradas para este DOT.</Empty>
+                    {!needsYou.length ? (
+                      <p className={styles.calmMessage}>No hay bloqueos, aprobaciones ni fallos que requieran tu intervención en este momento.</p>
                     ) : null}
-                  </div>
-                </section>
-
-                <section className={styles.card}>
-                  <header className={styles.cardHead}>
-                    <div>
-                      <small>SIGUIENTE MOVIMIENTO</small>
-                      <h2>{nextMove ? "Recomendado por estado real" : "Sin bloqueo inmediato"}</h2>
-                    </div>
-                  </header>
-                  <div className={styles.nextMove}>
-                    <p>{nextMove?.detail || "El DOT no tiene una urgencia registrada ahora."}</p>
-                    {nextMove ? (
-                      <button onClick={() => setTab(nextMove.tab)}>Abrir trabajo →</button>
-                    ) : null}
-                  </div>
-                  <div className={styles.miniStats}>
-                    <div><small>Resuelto hoy</small><strong>{resolvedToday}</strong></div>
-                    <div><small>Pendiente</small><strong>{currentPending}</strong></div>
                   </div>
                 </section>
               </div>
 
-              <section className={styles.card}>
-                <header className={styles.cardHead}>
+              <section className={styles.section}>
+                <header className={styles.sectionHead}>
                   <div>
-                    <small>ESPACIOS</small>
-                    <h2>Dónde está trabajando</h2>
+                    <span className={styles.eyebrow}>EL RECORRIDO LINK</span>
+                    <h2>Cómo encajo con los otros actores</h2>
                   </div>
-                  <button className={styles.textButton} onClick={() => setTab("espacios")}>Ver todos →</button>
+                  <p>Cada actor cuida una parte distinta del mismo recorrido.</p>
                 </header>
-                <div className={styles.spaceGrid}>
-                  {data.workspaces.slice(0, 4).map((workspace) => {
-                    const artifacts = data.artifacts.filter((a) => a.workspace_id === workspace.id);
-                    const subdots = data.subdots.filter((s) => s.workspace_id === workspace.id);
+                <div className={styles.journey}>
+                  {journeyDots.map((dot, index) => {
+                    const current =
+                      dot.slug === agent.operationalSlug || dot.technicalSlug === agent.slug;
                     return (
-                      <article className={styles.spaceCard} key={workspace.id}>
-                        <div className={styles.spaceTop}>
-                          <div>
-                            <small>{workspace.app_key || "LINK"}</small>
-                            <h3>{workspace.name}</h3>
-                          </div>
-                          <Status value={workspace.status} />
-                        </div>
-                        <p>{workspace.description || "Sin descripción registrada."}</p>
-                        <div className={styles.spaceFacts}>
-                          <span>{artifacts.length} artefactos</span>
-                          <span>{subdots.length} subdots</span>
-                          {workspaceAccessMap.get(workspace.id) ? (
-                            <span>{workspaceAccessMap.get(workspace.id)?.access_level}</span>
-                          ) : null}
-                        </div>
-                        <div className={styles.spaceActions}>
-                          <button onClick={() => setTab("espacios")}>Ver contexto</button>
-                          {workspace.route ? <a href={workspace.route}>Abrir ↗</a> : null}
-                        </div>
-                      </article>
+                      <div className={styles.journeyWrap} key={dot.slug}>
+                        <a href={`/dots/${dot.slug}`} className={current ? styles.journeyCurrent : ""}>
+                          <span>{index + 1}</span>
+                          <b>{String(dot.name).replace(/^LINKDOT\s*·?\s*/i, "")}</b>
+                          <small>{dot.responsibility || "Responsabilidad todavía no descrita."}</small>
+                        </a>
+                        {index < journeyDots.length - 1 ? <i>→</i> : null}
+                      </div>
                     );
                   })}
-                  {!data.workspaces.length ? <Empty>No hay espacios registrados para este DOT.</Empty> : null}
                 </div>
               </section>
 
-              <section className={styles.card}>
-                <header className={styles.cardHead}>
-                  <div>
-                    <small>EQUIPO VIVO</small>
-                    <h2>Subdots del DOT</h2>
-                  </div>
-                  <button className={styles.textButton} onClick={() => setTab("subdots")}>Ver equipo →</button>
-                </header>
-                <div className={styles.subdotRail}>
-                  {data.subdots.slice(0, 6).map((subdot) => {
-                    const artifactCount = data.artifacts.filter((a) => a.subdot_id === subdot.id).length;
-                    return (
-                      <article className={styles.subdotCard} key={subdot.id}>
-                        <div className={styles.subAvatar}>
-                          {String(subdot.name || subdot.subdot_slug)
-                            .replace(/^LINKSUBDOT\s*·?\s*/i, "")
-                            .split(/\s+/)
-                            .slice(0, 2)
-                            .map((x: string) => x[0])
-                            .join("")
-                            .toUpperCase()}
+              {data.subdots.length ? (
+                <section className={styles.section}>
+                  <header className={styles.sectionHead}>
+                    <div>
+                      <span className={styles.eyebrow}>MI EQUIPO</span>
+                      <h2>Especialistas que trabajan conmigo</h2>
+                    </div>
+                    <button className={styles.textButton} onClick={() => setTab("equipo")}>Ver todos →</button>
+                  </header>
+                  <div className={styles.peopleGrid}>
+                    {data.subdots.slice(0, 4).map((subdot) => (
+                      <article key={subdot.id}>
+                        <div className={styles.personAvatar}>
+                          {String(subdot.name || "SD").replace(/^LINKSUBDOT\s*·?\s*/i, "").slice(0, 2).toUpperCase()}
                         </div>
                         <div>
                           <small>LINKSUBDOT</small>
                           <h3>{subdot.name}</h3>
                           <p>{subdot.responsibility}</p>
-                          <span>{artifactCount} artefacto(s) · {human(subdot.status)}</span>
                         </div>
                       </article>
-                    );
-                  })}
-                  {!data.subdots.length ? <Empty>Este DOT todavía no tiene subdots registrados.</Empty> : null}
-                </div>
-              </section>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
             </>
           ) : null}
 
-          {tab === "espacios" ? (
-            <div className={styles.stack}>
-              {data.workspaces.map((workspace) => {
-                const subdots = data.subdots.filter((row) => row.workspace_id === workspace.id);
-                const artifacts = data.artifacts.filter((row) => row.workspace_id === workspace.id);
-                return (
-                  <section className={styles.card} key={workspace.id}>
-                    <header className={styles.cardHead}>
+          {tab === "trabajo" ? (
+            <section className={styles.section}>
+              <header className={styles.sectionHead}>
+                <div><span className={styles.eyebrow}>MI TRABAJO</span><h2>Misiones que tengo asignadas</h2></div>
+                <p>Qué debo resolver y qué prueba demuestra que quedó hecho.</p>
+              </header>
+              <div className={styles.taskList}>
+                {data.missions.map((mission) => {
+                  const evidence = data.evidence.filter((item) => item.mission_id === mission.id);
+                  const validated = evidence.filter((item) => item.status === "validated").length;
+                  return (
+                    <article key={mission.id}>
+                      <div className={styles.taskIcon}>✓</div>
                       <div>
-                        <small>WORKSPACE · {workspace.workspace_key}</small>
-                        <h2>{workspace.name}</h2>
-                      </div>
-                      <Status value={workspace.status} />
-                    </header>
-                    <p className={styles.body}>{workspace.description || "Sin descripción registrada."}</p>
-                    <div className={styles.spaceFacts}>
-                      <span>{artifacts.length} artefactos</span>
-                      <span>{subdots.length} subdots</span>
-                      {workspaceAccessMap.get(workspace.id) ? (
-                        <span>
-                          acceso {workspaceAccessMap.get(workspace.id)?.access_level}
-                          {workspaceAccessMap.get(workspace.id)?.is_default ? " · principal" : ""}
-                        </span>
-                      ) : null}
-                    </div>
-                    {workspace.route ? (
-                      <a className={styles.primaryLink} href={workspace.route}>Abrir espacio ↗</a>
-                    ) : null}
-
-                    <h3 className={styles.subheading}>ARTEFACTOS REALES</h3>
-                    <div className={styles.artifactGrid}>
-                      {artifacts.map((artifact) => (
-                        <article className={styles.artifact} key={artifact.id}>
-                          <small>{artifact.artifact_type}</small>
-                          <h3>{artifact.name}</h3>
-                          <p>{artifact.description || artifact.work_definition}</p>
-                          <div>
-                            <Status value={artifact.status} />
-                            {artifact.route ? <a href={artifact.route}>Abrir ↗</a> : null}
-                          </div>
-                        </article>
-                      ))}
-                      {!artifacts.length ? <Empty>No hay artefactos registrados en este espacio.</Empty> : null}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {tab === "conversaciones" ? (
-            <section className={styles.card}>
-              <header className={styles.cardHead}>
-                <div>
-                  <small>CONVERSACIONES</small>
-                  <h2>Contexto persistente</h2>
-                </div>
-                <span>{data.sessions.length} sesiones</span>
-              </header>
-              <div className={styles.sessions}>
-                {data.sessions.map((session) => {
-                  const messages = (sessionMessages.get(session.id) || []).slice(0, 6);
-                  return (
-                    <article key={session.id}>
-                      <header>
-                        <div>
-                          <b>{session.title || "Sesión sin título"}</b>
-                          <small>{session.channel || "LINK"} · {fmt(session.updated_at)}</small>
-                        </div>
-                        <span>{messages.length} mensajes cargados</span>
-                      </header>
-                      <div className={styles.messages}>
-                        {messages.map((message) => (
-                          <div key={message.id} data-role={message.role}>
-                            <small>{message.role}</small>
-                            <p>{message.summary || message.content}</p>
-                          </div>
-                        ))}
+                        <div className={styles.taskTitle}><h3>{mission.title}</h3><Status value={mission.status} /></div>
+                        <p>{mission.problem_statement || mission.diagnosis || "Sin explicación adicional."}</p>
+                        <small>Evidencia comprobada: {validated} de {evidence.length} · Actualizado {fmt(mission.updated_at)}</small>
                       </div>
                     </article>
                   );
                 })}
-                {!data.sessions.length ? <Empty>No hay conversaciones asociadas a este DOT.</Empty> : null}
+                {!data.missions.length ? <Empty>No tengo misiones registradas todavía.</Empty> : null}
               </div>
-            </section>
-          ) : null}
 
-          {tab === "subdots" ? (
-            <section className={styles.card}>
-              <header className={styles.cardHead}>
-                <div>
-                  <small>SUBDOTS</small>
-                  <h2>Especialistas que este DOT ya tiene</h2>
-                </div>
-                <span>{data.subdots.length} registrados</span>
-              </header>
-              <div className={styles.subdotGrid}>
-                {data.subdots.map((subdot) => {
-                  const artifacts = data.artifacts.filter((a) => a.subdot_id === subdot.id);
-                  const workspace = workspaceMap.get(subdot.workspace_id);
-                  return (
-                    <article key={subdot.id}>
-                      <div className={styles.subAvatar}>{String(subdot.name || "SD").slice(0, 2).toUpperCase()}</div>
-                      <div className={styles.subdotMain}>
-                        <div><small>{workspace?.name || "Workspace"}</small><Status value={subdot.status} /></div>
-                        <h3>{subdot.name}</h3>
-                        <p>{subdot.responsibility}</p>
-                        <span>{artifacts.length} artefacto(s) asignado(s)</span>
-                      </div>
-                    </article>
-                  );
-                })}
-                {!data.subdots.length ? <Empty>No hay subdots registrados todavía.</Empty> : null}
-              </div>
-            </section>
-          ) : null}
-
-          {tab === "mision" ? (
-            <div className={styles.stack}>
-              <section className={styles.card}>
-                <header className={styles.cardHead}>
-                  <div>
-                    <small>MISIÓN ACTUAL</small>
-                    <h2>{activeMission?.title || "Sin misión activa"}</h2>
-                  </div>
-                  {activeMission ? <Status value={activeMission.status} /> : null}
-                </header>
-                {activeMission ? (
-                  <>
-                    <p className={styles.missionNarrative}>
-                      {activeMission.problem_statement || activeMission.diagnosis || agent.description}
-                    </p>
-                    <div className={styles.factGrid}>
-                      <div><small>Prioridad</small><b>{activeMission.priority || "—"}</b></div>
-                      <div><small>Etapa</small><b>{activeMission.stage_key || metadata.stage_key || "transversal"}</b></div>
-                      <div><small>Evidencias</small><b>{data.evidence.filter((e) => e.mission_id === activeMission.id && e.status === "validated").length}/{data.evidence.filter((e) => e.mission_id === activeMission.id).length}</b></div>
-                      <div><small>Actualizada</small><b>{fmt(activeMission.updated_at)}</b></div>
-                    </div>
-                  </>
-                ) : <Empty>No hay una misión activa registrada.</Empty>}
-              </section>
-
-              <section className={styles.card}>
-                <header className={styles.cardHead}>
-                  <div><small>HANDOFFS</small><h2>Cómo entrega y recibe trabajo</h2></div>
-                </header>
-                <div className={styles.compactList}>
+              <div className={styles.handoffBox}>
+                <span className={styles.eyebrow}>ENTREGAS ENTRE ACTORES</span>
+                <h3>Cómo pasa el trabajo de una mano a otra</h3>
+                <div className={styles.simpleList}>
                   {data.handoffs.map((handoff) => (
                     <div key={handoff.id}>
                       <span>
-                        <b>{handoff.from_agent_slug} → {handoff.to_agent_slug}</b>
-                        <small>{handoff.summary || handoff.signal_type || "Sin resumen"}</small>
+                        <b>{technicalToLabel.get(String(handoff.from_agent_slug)) || handoff.from_agent_slug}</b>
+                        <em>→</em>
+                        <b>{technicalToLabel.get(String(handoff.to_agent_slug)) || handoff.to_agent_slug}</b>
                       </span>
+                      <small>{handoff.summary || "Entrega registrada sin explicación."}</small>
                       <Status value={handoff.status} />
                     </div>
                   ))}
-                  {!data.handoffs.length ? <Empty>No hay handoffs registrados.</Empty> : null}
+                  {!data.handoffs.length ? <Empty>No hay entregas entre actores registradas para este DOT.</Empty> : null}
                 </div>
-              </section>
-            </div>
+              </div>
+            </section>
           ) : null}
 
-          {tab === "mas" ? (
-            <div className={styles.moreGrid}>
-              <section className={styles.card}>
-                <header className={styles.cardHead}><div><small>MEMORIA</small><h2>Lo que conserva</h2></div><span>{data.memories.length}</span></header>
-                <div className={styles.compactList}>
-                  {data.memories.slice(0, 8).map((memory) => (
-                    <div key={memory.id}>
-                      <span><b>{memory.memory_key}</b><small>{memory.kind} · {fmt(memory.updated_at)}</small></span>
-                      <em>imp. {memory.importance ?? "—"}</em>
-                    </div>
-                  ))}
-                  {!data.memories.length ? <Empty>Sin memoria visible registrada.</Empty> : null}
-                </div>
-              </section>
+          {tab === "espacios" ? (
+            <section className={styles.section}>
+              <header className={styles.sectionHead}>
+                <div><span className={styles.eyebrow}>MIS ESPACIOS</span><h2>Los lugares donde trabajo</h2></div>
+                <p>Cada espacio reúne herramientas, artefactos y especialistas de un contexto.</p>
+              </header>
+              <div className={styles.spaceGrid}>
+                {data.workspaces.map((workspace) => {
+                  const artifacts = data.artifacts.filter((item) => item.workspace_id === workspace.id);
+                  const subdots = data.subdots.filter((item) => item.workspace_id === workspace.id);
+                  return (
+                    <article className={styles.spaceCard} key={workspace.id}>
+                      <div className={styles.spaceIcon}>▢</div>
+                      <div className={styles.spaceTop}>
+                        <div>
+                          <small>ESPACIO</small>
+                          <h3>{workspace.name}</h3>
+                        </div>
+                        <Status value={workspace.status} />
+                      </div>
+                      <p>{workspace.description || "Este espacio todavía no tiene una explicación."}</p>
+                      <div className={styles.spaceFacts}>
+                        <span>{artifacts.length} artefactos</span>
+                        <span>{subdots.length} especialistas</span>
+                        {workspaceAccessMap.get(workspace.id) ? <span>acceso {workspaceAccessMap.get(workspace.id)?.access_level}</span> : null}
+                      </div>
+                      {artifacts.length ? (
+                        <div className={styles.artifactList}>
+                          {artifacts.slice(0, 5).map((artifact) => (
+                            <div key={artifact.id}>
+                              <b>{artifact.name}</b>
+                              <small>{artifact.description || artifact.work_definition}</small>
+                              {artifact.route ? <a href={artifact.route}>Abrir ↗</a> : <Status value={artifact.status} />}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {workspace.route ? <a className={styles.openLink} href={workspace.route}>Entrar al espacio →</a> : null}
+                    </article>
+                  );
+                })}
+                {!data.workspaces.length ? <Empty>No tengo espacios registrados todavía.</Empty> : null}
+              </div>
+            </section>
+          ) : null}
 
-              <section className={styles.card}>
-                <header className={styles.cardHead}><div><small>CAPACIDADES</small><h2>Qué sabe hacer</h2></div><span>{data.capabilities.length}</span></header>
-                <div className={styles.compactList}>
-                  {data.capabilities.map((capability) => (
-                    <div key={capability.id || capability.capability_key}>
-                      <span><b>{capability.label || capability.capability_key}</b><small>{capability.description || capability.capability_key}</small></span>
-                      <code>{capability.capability_key}</code>
-                    </div>
-                  ))}
-                  {!data.capabilities.length ? <Empty>Sin capacidades registradas.</Empty> : null}
-                </div>
-              </section>
+          {tab === "equipo" ? (
+            <section className={styles.section}>
+              <header className={styles.sectionHead}>
+                <div><span className={styles.eyebrow}>MI EQUIPO</span><h2>Quién me ayuda y qué hace</h2></div>
+                <p>Los LINKSUBDOT son especialistas. No compiten conmigo: resuelven una parte concreta de mi responsabilidad.</p>
+              </header>
+              <div className={styles.peopleGrid}>
+                {data.subdots.map((subdot) => {
+                  const artifacts = data.artifacts.filter((item) => item.subdot_id === subdot.id);
+                  return (
+                    <article key={subdot.id}>
+                      <div className={styles.personAvatar}>
+                        {String(subdot.name || "SD").replace(/^LINKSUBDOT\s*·?\s*/i, "").slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className={styles.personHead}><small>{workspaceMap.get(subdot.workspace_id)?.name || "Workspace"}</small><Status value={subdot.status} /></div>
+                        <h3>{subdot.name}</h3>
+                        <p>{subdot.responsibility}</p>
+                        <span>{artifacts.length} artefacto(s) a su cargo</span>
+                      </div>
+                    </article>
+                  );
+                })}
+                {!data.subdots.length ? <Empty>No tengo especialistas registrados todavía.</Empty> : null}
+              </div>
+            </section>
+          ) : null}
 
-              <section className={styles.card}>
-                <header className={styles.cardHead}><div><small>PERMISOS</small><h2>Qué puede ejecutar</h2></div><span>{data.grants.length}</span></header>
-                <div className={styles.compactList}>
-                  {data.grants.map((grant) => (
-                    <div key={grant.id}>
-                      <span><b>{grant.action_key}</b><small>{grant.autonomy_level}</small></span>
-                      <Status value={grant.approval_required ? "waiting_approval" : "active"} />
-                    </div>
-                  ))}
-                  {!data.grants.length ? <Empty>Sin permisos registrados.</Empty> : null}
-                </div>
-              </section>
+          {tab === "conversaciones" ? (
+            <section className={styles.section}>
+              <header className={styles.sectionHead}>
+                <div><span className={styles.eyebrow}>CONVERSACIONES</span><h2>Los asuntos que recuerdo</h2></div>
+                <p>Cada conversación conserva su contexto para que no tengamos que empezar de cero.</p>
+              </header>
+              <div className={styles.chatList}>
+                {data.sessions.map((session) => {
+                  const messages = sessionMessages.get(session.id) || [];
+                  const last = messages[0];
+                  return (
+                    <article key={session.id}>
+                      <div className={styles.chatIcon}>◌</div>
+                      <div>
+                        <h3>{session.title || "Conversación sin título"}</h3>
+                        <p>{last?.summary || last?.content || "Todavía no hay mensajes visibles en esta conversación."}</p>
+                        <small>{session.channel || "LINK"} · última actividad {fmt(session.updated_at)}</small>
+                      </div>
+                      <span>{messages.length} mensajes</span>
+                    </article>
+                  );
+                })}
+                {!data.sessions.length ? <Empty>No tengo conversaciones registradas todavía.</Empty> : null}
+              </div>
+            </section>
+          ) : null}
 
-              <section className={styles.card}>
-                <header className={styles.cardHead}><div><small>ACTIVIDAD</small><h2>Señales y comandos</h2></div><span>{data.events.length + data.commands.length}</span></header>
-                <div className={styles.timeline}>
-                  {data.commands.slice(0, 6).map((command) => (
-                    <div key={command.id}>
-                      <i className={tone(command.status)} />
-                      <span><b>{command.action_key || command.command_type}</b><small>{fmt(command.requested_at)} · {human(command.status)}</small></span>
-                    </div>
-                  ))}
-                  {!data.commands.length ? <Empty>Sin comandos recientes.</Empty> : null}
-                </div>
-              </section>
+          {tab === "detalles" ? (
+            <section className={styles.section}>
+              <header className={styles.sectionHead}>
+                <div><span className={styles.eyebrow}>DETALLES</span><h2>La parte técnica, cuando la necesites</h2></div>
+                <p>Esto sostiene al DOT por debajo, pero no necesitas mirarlo para trabajar con él.</p>
+              </header>
+              <div className={styles.detailGrid}>
+                <article>
+                  <h3>Capacidades</h3>
+                  <div className={styles.simpleList}>
+                    {data.capabilities.map((capability) => (
+                      <div key={capability.id || capability.capability_key}>
+                        <b>{capability.label || capability.capability_key}</b>
+                        <small>{capability.description || "Sin descripción."}</small>
+                      </div>
+                    ))}
+                    {!data.capabilities.length ? <Empty>Sin capacidades registradas.</Empty> : null}
+                  </div>
+                </article>
 
-              <section className={styles.card}>
-                <header className={styles.cardHead}><div><small>CRON</small><h2>Trabajo recurrente</h2></div><span>{data.crons.length}</span></header>
-                <div className={styles.compactList}>
-                  {data.crons.map((cron) => (
-                    <div key={cron.id}>
-                      <span><b>{cron.name}</b><small>{cron.cycle_label || cron.description}</small></span>
-                      <Status value={cron.status} />
-                    </div>
-                  ))}
-                  {!data.crons.length ? <Empty>No hay cron asociado a este DOT.</Empty> : null}
-                </div>
-              </section>
+                <article>
+                  <h3>Permisos</h3>
+                  <div className={styles.simpleList}>
+                    {data.grants.map((grant) => (
+                      <div key={grant.id}>
+                        <b>{grant.action_key}</b>
+                        <small>{grant.approval_required ? "Necesita aprobación antes de ejecutar." : "Puede ejecutarse según su autonomía."}</small>
+                        <Status value={grant.approval_required ? "waiting_approval" : "active"} />
+                      </div>
+                    ))}
+                    {!data.grants.length ? <Empty>Sin permisos registrados.</Empty> : null}
+                  </div>
+                </article>
 
-              <section className={styles.card}>
-                <header className={styles.cardHead}><div><small>IDENTIDAD TÉCNICA</small><h2>Constitución</h2></div></header>
-                <dl className={styles.definitionList}>
-                  <div><dt>Responsabilidad</dt><dd>{metadata.responsibility || agent.description || "—"}</dd></div>
-                  <div><dt>Entrada</dt><dd>{metadata.entry_boundary || "—"}</dd></div>
-                  <div><dt>Salida</dt><dd>{metadata.exit_boundary || metadata.handoff_boundary || "—"}</dd></div>
-                  <div><dt>Runtime</dt><dd>{metadata.runtime || "LINK"}</dd></div>
-                  <div><dt>Modelo</dt><dd>{metadata.runtime_model || "—"}</dd></div>
-                </dl>
-              </section>
-            </div>
+                <article>
+                  <h3>Memoria</h3>
+                  <div className={styles.simpleList}>
+                    {data.memories.slice(0, 10).map((memory) => (
+                      <div key={memory.id}>
+                        <b>{memory.memory_key}</b>
+                        <small>{memory.kind} · {fmt(memory.updated_at)}</small>
+                      </div>
+                    ))}
+                    {!data.memories.length ? <Empty>Sin memoria visible registrada.</Empty> : null}
+                  </div>
+                </article>
+
+                <article>
+                  <h3>Rutinas</h3>
+                  <div className={styles.simpleList}>
+                    {data.crons.map((cron) => (
+                      <div key={cron.id}>
+                        <b>{cron.name}</b>
+                        <small>{cron.cycle_label || cron.description || "Rutina registrada."}</small>
+                        <Status value={cron.status} />
+                      </div>
+                    ))}
+                    {!data.crons.length ? <Empty>Sin rutinas asociadas.</Empty> : null}
+                  </div>
+                </article>
+
+                <article className={styles.fullDetail}>
+                  <h3>Identidad técnica</h3>
+                  <dl className={styles.definitionList}>
+                    <div><dt>Identidad</dt><dd>{agent.operationalSlug}</dd></div>
+                    <div><dt>Responsabilidad</dt><dd>{does}</dd></div>
+                    <div><dt>Entrada</dt><dd>{receives}</dd></div>
+                    <div><dt>Entrega</dt><dd>{delivers}</dd></div>
+                    <div><dt>Fuente de verdad</dt><dd>{metadata.source_of_truth || "supabase"}</dd></div>
+                    <div><dt>Runtime</dt><dd>{metadata.runtime || "LINK"}</dd></div>
+                    <div><dt>Modelo</dt><dd>{metadata.runtime_model || "—"}</dd></div>
+                  </dl>
+                </article>
+              </div>
+            </section>
           ) : null}
         </div>
       </main>
