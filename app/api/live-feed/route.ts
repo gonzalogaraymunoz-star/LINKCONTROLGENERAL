@@ -312,13 +312,11 @@ export async function GET() {
   });
 
   const stories: Row[] = [];
-  const seenStories = new Map<string, number>();
+  const seenStories = new Set<string>();
   for (const story of rawStories) {
-    const at = story.at ? new Date(story.at).getTime() : 0;
     const signature = `${story.actor}|${story.headline}`;
-    const previous = seenStories.get(signature);
-    if (previous && at && Math.abs(previous - at) < 45 * 60 * 1000) continue;
-    seenStories.set(signature, at || Date.now());
+    if (seenStories.has(signature)) continue;
+    seenStories.add(signature);
     stories.push(story);
     if (stories.length >= 24) break;
   }
