@@ -588,7 +588,83 @@ export async function wakeAgent(input: WakeInput) {
     timeout: { totalMs: 100_000, stepMs: 90_000 },
   });
 
-  if (!decisionResult) throw new Error("agent_returned_no_governed_decision");
+  if (!decisionResult) {
+    if (internalReviewOnly && thalamusContext) {
+      const identity =
+        thalamusContext.identity && typeof thalamusContext.identity === "object"
+          ? (thalamusContext.identity as Record<string, unknown>)
+          : {};
+      const client =
+        identity.client && typeof identity.client === "object"
+          ? (identity.client as Record<string, unknown>)
+          : null;
+      const project =
+        identity.project && typeof identity.project === "object"
+          ? (identity.project as Record<string, unknown>)
+          : null;
+      const gaps = Array.isArray(thalamusContext.gaps)
+        ? thalamusContext.gaps.map((gap) => String(gap))
+        : [];
+      const relevance =
+        thalamusContext.relevance && typeof thalamusContext.relevance === "object"
+          ? (thalamusContext.relevance as Record<string, unknown>)
+          : {};
+      const resolvedNames = [
+        client?.name ? String(client.name) : null,
+        project?.name ? String(project.name) : null,
+      ].filter(Boolean);
+
+      const summary = [
+        "Tálamo preparó contexto pertinente y el modelo no emitió una decisión gobernada.",
+        resolvedNames.length
+          ? `Identidad resuelta: ${Array.from(new Set(resolvedNames)).join(" / ")}.`
+          : "Identidad no resuelta.",
+        `Relevancia: ${String(relevance.status || "unknown")} (${String(relevance.score ?? "n/a")}).`,
+        gaps.length ? `Vacíos explícitos: ${gaps.join(", ")}.` : "Sin vacíos explícitos en el paquete talámico.",
+      ].join(" ");
+
+      const findings = [
+        client?.name
+          ? `Cliente/negocio de contexto: ${String(client.name)} (${String(client.slug || client.id || "")}).`
+          : null,
+        project?.name
+          ? `Proyecto relacionado: ${String(project.name)} · estado ${String(project.status || "unknown")} · fase ${String(project.phase || "unknown")}.`
+          : null,
+        gaps.length ? `Tálamo declara estos vacíos: ${gaps.join(", ")}.` : null,
+      ].filter((item): item is string => Boolean(item)).slice(0, 5);
+
+      const nextStep = gaps.includes("no_scoped_intelligence")
+        ? "Completar inteligencia scoped y trazable para la identidad resuelta antes de ampliar conclusiones."
+        : gaps.includes("no_operational_business_binding")
+          ? "Resolver el binding operacional faltante antes de tratar esta identidad como negocio operativo en LINK WORLD."
+          : "Continuar solo con el siguiente vacío explícito del paquete talámico; no ampliar contexto sin necesidad.";
+
+      await markWake(supabase, {
+        event: sourceEvent,
+        agentSlug: input.agentSlug,
+        stageKey,
+        status: "internal",
+        reason: "thalamus_fallback_no_model_decision",
+        internalSummary: summary,
+        findings,
+        nextStep,
+        missionCode: mission?.mission_code || null,
+      });
+
+      decisionResult = {
+        decision: "internal_work",
+        summary,
+        findings,
+        nextStep,
+        approvalRequired: false,
+        persistedAs: "AGENT_WAKE_INTERNAL",
+        fallback: "thalamus_deterministic",
+        modelDecisionMissing: true,
+      };
+    } else {
+      throw new Error("agent_returned_no_governed_decision");
+    }
+  }
 
   return {
     ok: true,
