@@ -75,6 +75,68 @@ type Feed = {
   stories: FeedStory[];
 };
 
+type AttentionItem = {
+  id: string;
+  kind: "approval" | "retry" | "blocked";
+  severity: "critical" | "attention" | "decision";
+  actorSlug: string;
+  dotSlug: string;
+  actorName: string;
+  state: string;
+  title: string;
+  summary: string;
+  failure?: string | null;
+  missionCode?: string | null;
+  missionTitle?: string | null;
+  businessGlobalId?: string | null;
+  businessName?: string | null;
+  commandId?: string | null;
+  commandAction?: string | null;
+  commandStatus?: string | null;
+  approvalStatus?: string | null;
+  updatedAt?: string | null;
+  location: { label: string; href: string };
+  prompt: string;
+};
+
+type AttentionApproval = {
+  id: string;
+  actorSlug: string;
+  dotSlug: string;
+  actorName: string;
+  actionKey: string;
+  actionLabel: string;
+  summary: string;
+  requestedAt?: string | null;
+  globalId?: string | null;
+  href: string;
+  prompt: string;
+};
+
+type AttentionEvent = {
+  id: string;
+  eventType: string;
+  title: string;
+  detail: string;
+  actorSlug: string;
+  dotSlug: string;
+  actorName: string;
+  at?: string | null;
+  tone: string;
+  href: string;
+};
+
+type AttentionData = {
+  ok: boolean;
+  generatedAt: string;
+  counts: { attention: number; approvals: number; recentEvents: number };
+  attention: AttentionItem[];
+  approvals: AttentionApproval[];
+  events: AttentionEvent[];
+};
+
+type AttentionTab = "attention" | "approvals" | "events";
+
 type Mode = "ecosystem" | "now" | "business" | "flow" | "problems" | "evidence";
 
 const MODES: Array<{ id: Mode; label: string; hint: string }> = [
@@ -242,6 +304,11 @@ export default function LinkMycelium({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [feed, setFeed] = useState<Feed | null>(null);
   const [feedError, setFeedError] = useState("");
+  const [attentionData, setAttentionData] = useState<AttentionData | null>(null);
+  const [attentionError, setAttentionError] = useState("");
+  const [attentionOpen, setAttentionOpen] = useState(false);
+  const [attentionActor, setAttentionActor] = useState<string | null>(null);
+  const [attentionTab, setAttentionTab] = useState<AttentionTab>("attention");
 
   const nodeMap = useMemo(
     () => new Map(initialNodes.map((node) => [node.id, node])),
@@ -277,6 +344,35 @@ export default function LinkMycelium({
 
     void load();
     timer = setInterval(() => void load(), 5000);
+    return () => {
+      active = false;
+      if (timer) clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    async function loadAttention() {
+      try {
+        const response = await fetch("/api/micelio-attention", { cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "attention_feed_unavailable");
+        }
+        if (!active) return;
+        setAttentionData(payload);
+        setAttentionError("");
+      } catch (error: any) {
+        if (!active) return;
+        setAttentionError(error?.message || "No pudimos leer eventos y decisiones.");
+      }
+    }
+
+    void loadAttention();
+    timer = setInterval(() => void loadAttention(), 8000);
+
     return () => {
       active = false;
       if (timer) clearInterval(timer);
@@ -481,6 +577,12 @@ export default function LinkMycelium({
     }
   }
 
+  function openAttention(actorSlug?: string | null, tab: AttentionTab = "attention") {
+    setAttentionActor(actorSlug || null);
+    setAttentionTab(tab);
+    setAttentionOpen(true);
+  }
+
   const inspectorNode = selectedNode;
   const inspectorEdge = selectedEdge;
   const problemCount =
@@ -500,6 +602,16 @@ export default function LinkMycelium({
         </div>
         <div className={styles.topActions}>
           <span className={styles.truthBadge}><i /> Fuente viva · Supabase</span>
+          <button
+            className={styles.attentionButton}
+            onClick={() => openAttention(null, "attention")}
+          >
+            <i />
+            Eventos & decisiones
+            {attentionData?.counts.attention || attentionData?.counts.approvals ? (
+              <b>{(attentionData?.counts.attention || 0) + (attentionData?.counts.approvals || 0)}</b>
+            ) : null}
+          </button>
           <a href="/linkguide">LINK Guide</a>
           <a href="/">Control Central</a>
         </div>
@@ -694,7 +806,14 @@ export default function LinkMycelium({
                         (selectedNodeId === node.id ? styles.nodeSelected : "")
                       }
                       style={{ left: pos.x + "%", top: pos.y + "%" }}
-                      onClick={() => focusNode(node.id)}
+                      onClick={(event) => {
+                        const target = event.target as HTMLElement;
+                        if (target.closest("[data-attention-trigger]")) {
+                          openAttention(actor?.slug || node.meta?.slug || node.meta?.dot_slug || null, "attention");
+                          return;
+                        }
+                        focusNode(node.id);
+                      }}
                       title={node.description || node.label}
                     >
                       <span className={styles.nodeIcon}>{KIND_ICON[node.kind]}</span>
@@ -705,7 +824,16 @@ export default function LinkMycelium({
                           {actor?.stateLabel || stateLabel(node.status)}
                         </em>
                       </span>
-                      {hasProblem ? <i className={styles.problemPip}>!</i> : null}
+                      {hasProblem ? (
+                        <span
+                          className={styles.problemPip}
+                          data-attention-trigger
+                          title="Ver qué pasa y cómo resolverlo"
+                          aria-label="Ver qué pasa y cómo resolverlo"
+                        >
+                          !
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -747,6 +875,14 @@ export default function LinkMycelium({
                 setSelectedNodeId(null);
                 setSelectedEdgeId(id);
               }}
+              onAttention={() => {
+                const actor = (feed?.actors || []).find(
+                  (item) =>
+                    actorNodeIds.get(item.slug) === inspectorNode.id ||
+                    actorNodeIds.get(item.dotSlug) === inspectorNode.id,
+                );
+                openAttention(actor?.slug || inspectorNode.meta?.slug || inspectorNode.meta?.dot_slug || null, "attention");
+              }}
               onClose={() => setSelectedNodeId(null)}
             />
           ) : (
@@ -760,6 +896,18 @@ export default function LinkMycelium({
           )}
         </aside>
       </section>
+
+      {attentionOpen ? (
+        <AttentionCenter
+          data={attentionData}
+          error={attentionError}
+          actorFilter={attentionActor}
+          tab={attentionTab}
+          setTab={setAttentionTab}
+          onClearFilter={() => setAttentionActor(null)}
+          onClose={() => setAttentionOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -771,6 +919,7 @@ function NodeInspector({
   actor,
   onNode,
   onEdge,
+  onAttention,
   onClose,
 }: {
   node: GraphNode;
@@ -779,6 +928,7 @@ function NodeInspector({
   actor?: FeedActor;
   onNode: (id: string) => void;
   onEdge: (id: string) => void;
+  onAttention: () => void;
   onClose: () => void;
 }) {
   return (
@@ -810,6 +960,11 @@ function NodeInspector({
             <span className={styles.attentionBox}>
               {actor.pendingApprovals} acción{actor.pendingApprovals === 1 ? "" : "es"} espera{actor.pendingApprovals === 1 ? "" : "n"} aprobación.
             </span>
+          ) : null}
+          {isProblemState(actor.state) || actor.pendingApprovals ? (
+            <button className={styles.attentionLink} onClick={onAttention}>
+              Ver qué pasa y cómo resolverlo →
+            </button>
           ) : null}
         </section>
       ) : null}
@@ -1020,6 +1175,253 @@ function WelcomeInspector({
         <b>Una línea no existe solo porque se vea bien.</b>
         <p>Si LINK no puede demostrar la relación, se muestra como “por comprobar”.</p>
       </section>
+    </div>
+  );
+}
+
+
+function AttentionCenter({
+  data,
+  error,
+  actorFilter,
+  tab,
+  setTab,
+  onClearFilter,
+  onClose,
+}: {
+  data: AttentionData | null;
+  error: string;
+  actorFilter: string | null;
+  tab: AttentionTab;
+  setTab: (tab: AttentionTab) => void;
+  onClearFilter: () => void;
+  onClose: () => void;
+}) {
+  const [copiedId, setCopiedId] = useState("");
+
+  const filteredAttention = (data?.attention || []).filter(
+    (item) => !actorFilter || item.actorSlug === actorFilter || item.dotSlug === actorFilter,
+  );
+  const filteredApprovals = (data?.approvals || []).filter(
+    (item) => !actorFilter || item.actorSlug === actorFilter || item.dotSlug === actorFilter,
+  );
+  const filteredEvents = (data?.events || []).filter(
+    (item) => !actorFilter || item.actorSlug === actorFilter || item.dotSlug === actorFilter,
+  );
+
+  const actorName =
+    filteredAttention[0]?.actorName ||
+    filteredApprovals[0]?.actorName ||
+    filteredEvents[0]?.actorName ||
+    actorFilter;
+
+  async function copyPrompt(id: string, prompt: string) {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopiedId(id);
+      window.setTimeout(() => setCopiedId((current) => (current === id ? "" : current)), 1800);
+    } catch {
+      setCopiedId("");
+    }
+  }
+
+  return (
+    <div className={styles.attentionLayer} role="dialog" aria-modal="true" aria-label="Eventos y decisiones">
+      <button className={styles.attentionScrim} onClick={onClose} aria-label="Cerrar panel" />
+      <aside className={styles.attentionPanel}>
+        <header className={styles.attentionHead}>
+          <div>
+            <span className={styles.eyebrow}>CENTRO DE ATENCIÓN</span>
+            <h2>Eventos & decisiones</h2>
+            <p>
+              Lo que está pasando, dónde ocurre y qué hacer cuando un DOT no puede seguir solo.
+            </p>
+          </div>
+          <button className={styles.attentionClose} onClick={onClose}>×</button>
+        </header>
+
+        {actorFilter ? (
+          <div className={styles.attentionFilter}>
+            <span>Mostrando solo <b>{actorName || actorFilter}</b></span>
+            <button onClick={onClearFilter}>Ver todo LINK</button>
+          </div>
+        ) : null}
+
+        <nav className={styles.attentionTabs}>
+          <button className={tab === "attention" ? styles.attentionTabActive : ""} onClick={() => setTab("attention")}>
+            Atención <b>{filteredAttention.length}</b>
+          </button>
+          <button className={tab === "approvals" ? styles.attentionTabActive : ""} onClick={() => setTab("approvals")}>
+            Aprobaciones <b>{filteredApprovals.length}</b>
+          </button>
+          <button className={tab === "events" ? styles.attentionTabActive : ""} onClick={() => setTab("events")}>
+            Eventos <b>{filteredEvents.length}</b>
+          </button>
+        </nav>
+
+        <div className={styles.attentionBody}>
+          {!data && !error ? (
+            <div className={styles.attentionEmpty}>
+              <span>◌</span>
+              <b>Leyendo el organismo…</b>
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className={styles.attentionEmpty}>
+              <span>!</span>
+              <b>No pudimos leer los eventos.</b>
+              <small>{error}</small>
+            </div>
+          ) : null}
+
+          {data && tab === "attention" ? (
+            filteredAttention.length ? (
+              <div className={styles.attentionCards}>
+                {filteredAttention.map((item) => (
+                  <article
+                    key={item.id}
+                    className={
+                      styles.attentionCard +
+                      " " +
+                      (item.severity === "critical"
+                        ? styles.attentionCritical
+                        : item.severity === "decision"
+                          ? styles.attentionDecision
+                          : styles.attentionWarn)
+                    }
+                  >
+                    <header>
+                      <div>
+                        <small>{item.actorName} · {stateLabel(item.state)}</small>
+                        <h3>{item.title}</h3>
+                      </div>
+                      <span>{relativeTime(item.updatedAt)}</span>
+                    </header>
+
+                    <p>{item.summary}</p>
+
+                    {item.failure ? (
+                      <div className={styles.failureBox}>
+                        <small>QUÉ FALLÓ</small>
+                        <b>{item.failure}</b>
+                      </div>
+                    ) : null}
+
+                    <div className={styles.attentionFacts}>
+                      {item.missionCode ? (
+                        <div>
+                          <small>MISIÓN</small>
+                          <b>{item.missionCode}</b>
+                          {item.missionTitle ? <span>{item.missionTitle}</span> : null}
+                        </div>
+                      ) : null}
+                      {item.businessName || item.businessGlobalId ? (
+                        <div>
+                          <small>NEGOCIO</small>
+                          <b>{item.businessName || item.businessGlobalId}</b>
+                        </div>
+                      ) : null}
+                      <div>
+                        <small>DÓNDE PASA</small>
+                        <b>{item.location.label}</b>
+                      </div>
+                    </div>
+
+                    <details className={styles.promptBox}>
+                      <summary>Prompt de rescate para el DOT</summary>
+                      <pre>{item.prompt}</pre>
+                      <button onClick={() => void copyPrompt(item.id, item.prompt)}>
+                        {copiedId === item.id ? "Copiado ✓" : "Copiar prompt"}
+                      </button>
+                    </details>
+
+                    <footer>
+                      <a href={item.location.href}>Ir exactamente allí →</a>
+                      {item.kind === "approval" ? (
+                        <button onClick={() => setTab("approvals")}>Ver decisión</button>
+                      ) : null}
+                    </footer>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.attentionEmpty}>
+                <span>✓</span>
+                <b>No hay bloqueos activos en esta vista.</b>
+                <small>Los eventos recientes siguen disponibles en la pestaña Eventos.</small>
+              </div>
+            )
+          ) : null}
+
+          {data && tab === "approvals" ? (
+            filteredApprovals.length ? (
+              <div className={styles.attentionCards}>
+                {filteredApprovals.map((item) => (
+                  <article key={item.id} className={styles.attentionCard + " " + styles.attentionDecision}>
+                    <header>
+                      <div>
+                        <small>{item.actorName} · ESPERA TU DECISIÓN</small>
+                        <h3>{item.actionLabel}</h3>
+                      </div>
+                      <span>{relativeTime(item.requestedAt)}</span>
+                    </header>
+                    <p>{item.summary}</p>
+                    <div className={styles.attentionFacts}>
+                      <div><small>ACTOR</small><b>{item.actorName}</b></div>
+                      <div><small>ACCIÓN</small><b>{item.actionKey}</b></div>
+                    </div>
+                    <details className={styles.promptBox}>
+                      <summary>Prompt para evaluar la aprobación</summary>
+                      <pre>{item.prompt}</pre>
+                      <button onClick={() => void copyPrompt(item.id, item.prompt)}>
+                        {copiedId === item.id ? "Copiado ✓" : "Copiar prompt"}
+                      </button>
+                    </details>
+                    <footer>
+                      <a href={item.href}>Abrir donde se decide →</a>
+                    </footer>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.attentionEmpty}>
+                <span>✓</span>
+                <b>No hay aprobaciones pendientes.</b>
+                <small>Eso no significa que no haya problemas: revisa Atención para reintentos o bloqueos.</small>
+              </div>
+            )
+          ) : null}
+
+          {data && tab === "events" ? (
+            filteredEvents.length ? (
+              <div className={styles.eventList}>
+                {filteredEvents.map((event) => (
+                  <a key={event.id} href={event.href}>
+                    <i className={event.tone === "problem" ? styles.eventProblem : event.tone === "attention" ? styles.eventAttention : styles.eventQuiet} />
+                    <div>
+                      <small>{event.actorName} · {relativeTime(event.at)}</small>
+                      <b>{event.title}</b>
+                      <span>{event.detail}</span>
+                    </div>
+                    <em>→</em>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.attentionEmpty}>
+                <span>○</span>
+                <b>No hay eventos recientes para este filtro.</b>
+              </div>
+            )
+          ) : null}
+        </div>
+
+        <footer className={styles.attentionFooter}>
+          <span>Actualiza automáticamente · fuente: Supabase</span>
+          <button onClick={onClose}>Volver al Micelio</button>
+        </footer>
+      </aside>
     </div>
   );
 }
