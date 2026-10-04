@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import styles from "./DotWorkspacePanel.module.css";
 
 type Row = Record<string, any>;
@@ -95,7 +96,10 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 export default function DotWorkspacePanel({ data }: { data: DotData }) {
-  const [tab, setTab] = useState<TabId>("inicio");
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab") as TabId | null;
+  const initialTab: TabId = TABS.some(([id]) => id === requestedTab) ? (requestedTab as TabId) : "inicio";
+  const [tab, setTab] = useState<TabId>(initialTab);
   const agent = data.agent;
   const metadata = agent.metadata || {};
   const displayName = String(metadata.display_label || agent.name || agent.slug || "DOT");
