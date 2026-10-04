@@ -78,6 +78,7 @@ async function markWake(
     findings?: string[];
     nextStep?: string | null;
     missionCode?: string | null;
+    structuredResult?: Record<string, unknown> | null;
   },
 ) {
   const dedupeKey = `agent_wake:${input.event.id}:${input.agentSlug}`;
@@ -108,6 +109,7 @@ async function markWake(
         findings: input.findings || [],
         next_step: input.nextStep || null,
         mission_code: input.status === "internal" ? input.missionCode || null : null,
+        structured_result: input.structuredResult || null,
         model: MODEL,
       },
       occurred_at: new Date().toISOString(),
@@ -416,6 +418,103 @@ export async function wakeAgent(input: WakeInput) {
 
   let decisionResult: Record<string, unknown> | null = null;
   const internalReviewOnly = input.workType === "internal_review";
+
+  const sourcePayload =
+    sourceEvent.payload && typeof sourceEvent.payload === "object"
+      ? (sourceEvent.payload as Record<string, unknown>)
+      : {};
+  const gatewayPacketType =
+    typeof sourcePayload.packet_type === "string" ? sourcePayload.packet_type : null;
+
+  if (internalReviewOnly && gatewayPacketType === "context_request" && thalamusContext) {
+    const identity =
+      thalamusContext.identity && typeof thalamusContext.identity === "object"
+        ? (thalamusContext.identity as Record<string, unknown>)
+        : {};
+    const knownFacts = Array.isArray(thalamusContext.known_facts)
+      ? thalamusContext.known_facts
+      : [];
+    const gaps = Array.isArray(thalamusContext.gaps)
+      ? thalamusContext.gaps.map((gap) => String(gap))
+      : [];
+    const evidencePointers = Array.isArray(thalamusContext.evidence_pointers)
+      ? thalamusContext.evidence_pointers.map((ref) => String(ref))
+      : [];
+    const recommendedRoute =
+      thalamusContext.recommended_route && typeof thalamusContext.recommended_route === "object"
+        ? (thalamusContext.recommended_route as Record<string, unknown>)
+        : {};
+
+    const findings = knownFacts
+      .map((fact) => {
+        if (!fact || typeof fact !== "object") return null;
+        const row = fact as Record<string, unknown>;
+        return typeof row.statement === "string" ? row.statement : null;
+      })
+      .filter((item): item is string => Boolean(item))
+      .slice(0, 5);
+
+    const resolvedLabels = [
+      identity.client && typeof identity.client === "object"
+        ? String((identity.client as Record<string, unknown>).name || "")
+        : "",
+      identity.project && typeof identity.project === "object"
+        ? String((identity.project as Record<string, unknown>).name || "")
+        : "",
+    ].filter(Boolean);
+
+    const structuredResult = {
+      resolved_identity: identity,
+      known_facts: knownFacts,
+      gaps,
+      evidence_pointers: evidencePointers,
+      recommended_route: recommendedRoute,
+      context_strength: recommendedRoute.context_strength || null,
+      answer_mode: "thalamus_context_response",
+    };
+
+    const summary = resolvedLabels.length
+      ? `Tálamo resolvió el contexto de ${Array.from(new Set(resolvedLabels)).join(" / ")}. Se responde con los hechos persistidos disponibles y se declaran explícitamente los vacíos, sin volver a pedir lo que ya está resuelto.`
+      : "Tálamo preparó el contexto disponible, pero la identidad aún no quedó resuelta.";
+
+    const nextStep = gaps.includes("no_scoped_intelligence")
+      ? "Incorporar inteligencia scoped trazable como candidata o verificada, manteniendo separada la identidad del binding operacional."
+      : gaps.includes("scoped_intelligence_unverified")
+        ? "Validar únicamente la inteligencia candidata que sea material antes de consolidarla en Cortex."
+        : gaps.includes("no_operational_business_binding")
+          ? "Crear o validar el binding operacional solo si LINK Digital debe actuar como negocio operativo; no inventarlo para completar el contexto."
+          : "Usar este paquete como contexto suficiente y recuperar más información solo si la siguiente decisión lo exige.";
+
+    await markWake(supabase, {
+      event: sourceEvent,
+      agentSlug: input.agentSlug,
+      stageKey,
+      status: "internal",
+      reason: "thalamus_owned_context_response",
+      internalSummary: summary,
+      findings,
+      nextStep,
+      missionCode: mission?.mission_code || null,
+      structuredResult,
+    });
+
+    return {
+      ok: true,
+      agentSlug: input.agentSlug,
+      model: MODEL,
+      decision: {
+        decision: "internal_work",
+        summary,
+        findings,
+        nextStep,
+        approvalRequired: false,
+        persistedAs: "AGENT_WAKE_INTERNAL",
+        structuredResult,
+        thalamusOwned: true,
+      },
+      finalText: "",
+    };
+  }
 
   const decisionTool = tool({
     description:
