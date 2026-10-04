@@ -1029,3 +1029,79 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .cc-live-ticker button:nth-child(n+4){display:none}
   .cc-live-featured h3{font-size:17px}
 }
+
+
+/* FLUID APPROVALS · one decision at a time */
+.cc-approval-strip{
+  min-height:72px;
+  border:1px solid #e7e4dc;
+  background:rgba(255,252,245,.9);
+  border-radius:13px;
+  padding:11px 13px;
+  display:grid;
+  grid-template-columns:10px minmax(0,1fr) auto;
+  gap:11px;
+  align-items:center;
+}
+.cc-approval-strip.is-ready{background:#fff}
+.cc-approval-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:#c29a59;
+  box-shadow:0 0 0 4px #f8f1e5;
+}
+.cc-approval-copy{min-width:0}
+.cc-approval-copy b{
+  display:block;
+  font-size:10px;
+  margin-top:3px;
+  line-height:1.35;
+}
+.cc-approval-copy small{
+  display:block;
+  font-size:8px;
+  line-height:1.45;
+  color:#94959c;
+  margin-top:3px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:760px;
+}
+.cc-approval-strip>a,.cc-approval-actions>a{
+  font-size:8px;
+  color:#6f7cab;
+  text-decoration:none;
+  white-space:nowrap;
+}
+.cc-approval-actions{display:flex;gap:6px;align-items:center}
+.cc-approval-actions button{
+  height:30px;
+  border:1px solid #deddd8;
+  background:#fff;
+  color:#777880;
+  border-radius:999px;
+  padding:0 10px;
+  font-size:8px;
+}
+.cc-approval-actions button.is-primary{
+  background:#252629;
+  color:#fff;
+  border-color:#252629;
+}
+.cc-approval-actions button:disabled{opacity:.45}
+.cc-approval-message{
+  grid-column:2/-1;
+  font-size:7px;
+  color:#8c8d94;
+  margin-top:-4px;
+}
+
+@media(max-width:760px){
+  .cc-approval-strip{grid-template-columns:10px minmax(0,1fr)}
+  .cc-approval-strip>a,.cc-approval-actions{grid-column:2}
+  .cc-approval-actions{flex-wrap:wrap}
+  .cc-approval-copy small{white-space:normal;max-height:34px}
+}
+
+.cc-home-counters.is-three{grid-template-columns:repeat(3,1fr)}
+@media(max-width:900px){.cc-home-counters.is-three{grid-template-columns:1fr}}

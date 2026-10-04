@@ -186,7 +186,7 @@ export async function GET() {
   });
 
   const relevantEvents = (eventsResult.data || []).filter((event: Row) => {
-    if (["AGENT_WAKE_PROPOSED", "AGENT_WAKE_NOOP", "AGENT_WAKE_FAILED", "system.link_pulse.completed"].includes(event.event_type)) return true;
+    if (["AGENT_WAKE_PROPOSED", "AGENT_WAKE_INTERNAL", "AGENT_WAKE_NOOP", "AGENT_WAKE_FAILED", "system.link_pulse.completed"].includes(event.event_type)) return true;
     if (event.source_provider === "control-central" && event.event_type !== "AGENT_ACTION_PROPOSED" && event.payload?.agent_slug) return true;
     if (["lead.created", "sale.confirmed", "operation.completed", "feedback.closed", "product.available"].includes(event.event_type)) return true;
     return false;
@@ -211,6 +211,21 @@ export async function GET() {
         tone: "attention",
         headline: `${actor.name} propuso ${actionText(payload.action_key)}.`,
         detail: proposalDetail(payload.action_key),
+        href: `/dots/${actor.dotSlug}`,
+      };
+    }
+
+    if (event.event_type === "AGENT_WAKE_INTERNAL") {
+      const summary = String(payload.internal_summary || payload.reason || "").trim();
+      const nextStep = String(payload.next_step || "").trim();
+      return {
+        id: event.id,
+        at: event.occurred_at || event.received_at,
+        actor: actor.name,
+        actorSlug: actor.slug,
+        tone: "success",
+        headline: `${actor.name} avanzó trabajo interno.`,
+        detail: nextStep ? `${summary} Próximo paso: ${nextStep}` : summary,
         href: `/dots/${actor.dotSlug}`,
       };
     }

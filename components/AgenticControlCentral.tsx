@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import LinkPulseButton from "@/components/LinkPulseButton";
 import LiveLinkFeed from "@/components/LiveLinkFeed";
+import CompactApprovals from "@/components/CompactApprovals";
 
 export type AgentCapability = {
   capability_key: string;
@@ -359,7 +360,7 @@ export default function AgenticControlCentral({ initialAgents }: { initialAgents
 
         <div className="cc-canvas">
           {error ? <div className="cc-alert"><b>No pudimos leer todo LINK.</b><span>{error}</span></div> : null}
-          {section === "Inicio" ? <HomeView actors={actors} allAgents={initialAgents} summary={summary} loading={loading} go={go} /> : null}
+          {section === "Inicio" ? <HomeView actors={actors} summary={summary} go={go} /> : null}
           {section === "Actores" ? <ActorsView actors={actors} allAgents={initialAgents} summary={summary} /> : null}
           {section === "Trabajo" ? <WorkView actors={actors} allAgents={initialAgents} summary={summary} loading={loading} /> : null}
           {section === "Espacios" ? <SpacesView actors={actors} allAgents={initialAgents} summary={summary} loading={loading} /> : null}
@@ -396,38 +397,14 @@ function NavGroup({ label, items, section, go, collapsed, compact = false }: {
   );
 }
 
-function HomeView({ actors, allAgents, summary, loading, go }: {
+function HomeView({ actors, summary, go }: {
   actors: AgentRecord[];
-  allAgents: AgentRecord[];
   summary: any;
-  loading: boolean;
   go: (section: Section) => void;
 }) {
   const missions = (summary?.agentMissions || []).filter((mission: any) =>
     ["approved", "active", "blocked", "waiting_evidence"].includes(String(mission.status)),
   );
-  const commands = summary?.agentActions || [];
-  const queue = summary?.agentWorkQueue || [];
-  const needsYou = [
-    ...commands.filter((row: any) => row.requires_approval && row.approval_status === "pending").map((row: any) => ({
-      id: "command-" + row.id,
-      title: "Hay una decisión esperando tu aprobación",
-      detail: actorLabelForSlug(row.actor, allAgents) + " · " + (row.action_key || row.command_type),
-      section: "Evidencia" as Section,
-    })),
-    ...missions.filter((row: any) => row.status === "blocked").map((row: any) => ({
-      id: "mission-" + row.id,
-      title: "Un actor tiene una misión bloqueada",
-      detail: actorLabelForSlug(row.assigned_agent_slug || row.created_by_agent, allAgents) + " · " + row.title,
-      section: "Trabajo" as Section,
-    })),
-    ...queue.filter((row: any) => ["blocked", "awaiting_approval", "waiting_approval"].includes(row.status)).map((row: any) => ({
-      id: "queue-" + row.id,
-      title: row.status === "blocked" ? "Hay trabajo bloqueado" : "Hay trabajo esperando una decisión",
-      detail: actorLabelForSlug(row.agent_slug, allAgents) + " · " + (row.reason || row.work_type || "Revisar cola"),
-      section: "Trabajo" as Section,
-    })),
-  ].slice(0, 6);
   const spaces = summary?.dotWorkspaces || [];
 
   return (
@@ -442,48 +419,18 @@ function HomeView({ actors, allAgents, summary, loading, go }: {
       </section>
 
       <LiveLinkFeed />
+      <CompactApprovals />
 
-      <div className="cc-home-counters">
+      <div className="cc-home-counters is-three">
         <button onClick={() => go("Actores")}><strong>{actors.length}</strong><span>actores principales</span><small>ver quién hace qué →</small></button>
         <button onClick={() => go("Trabajo")}><strong>{missions.length}</strong><span>misiones en curso</span><small>ver trabajo real →</small></button>
         <button onClick={() => go("Espacios")}><strong>{spaces.length}</strong><span>espacios de trabajo</span><small>ver dónde trabajan →</small></button>
-        <button onClick={() => go(needsYou.length ? "Trabajo" : "Evidencia")} className={needsYou.length ? " is-attention" : ""}>
-          <strong>{needsYou.length}</strong><span>necesitan de ti</span><small>{needsYou.length ? "revisar ahora →" : "sin bloqueos urgentes"}</small>
-        </button>
       </div>
 
       <section className="cc-card">
         <Head eyebrow="RECORRIDO LINK" title="Cada actor cuida una parte del camino" note="Toca un actor para entrar a su propio espacio." />
         <ActorJourney actors={actors.filter((actor) => actor.slug !== "link-director")} />
       </section>
-
-      <div className="cc-home-grid">
-        <section className="cc-card">
-          <Head eyebrow="NECESITA DE TI" title={needsYou.length ? "Hay cosas que decidir" : "Todo claro por ahora"} />
-          <div className="cc-action-list">
-            {needsYou.map((item, index) => (
-              <button key={item.id} onClick={() => go(item.section)}>
-                <span>{index + 1}</span><div><b>{item.title}</b><small>{item.detail}</small></div><em>→</em>
-              </button>
-            ))}
-            {!needsYou.length && !loading ? <Empty>No hay bloqueos ni aprobaciones pendientes que requieran tu intervención.</Empty> : null}
-          </div>
-        </section>
-
-        <section className="cc-card">
-          <Head eyebrow="EN MOVIMIENTO" title="Qué están haciendo ahora" />
-          <div className="cc-simple-list">
-            {missions.slice(0, 6).map((mission: any) => (
-              <a key={mission.id} href={dotHrefForSlug(mission.assigned_agent_slug || mission.created_by_agent, allAgents)}>
-                <span className="cc-list-dot" />
-                <div><b>{mission.title}</b><small>{actorLabelForSlug(mission.assigned_agent_slug || mission.created_by_agent, allAgents)} · {humanStatus(mission.status)}</small></div>
-                <em>→</em>
-              </a>
-            ))}
-            {!missions.length && !loading ? <Empty>No hay misiones activas registradas.</Empty> : null}
-          </div>
-        </section>
-      </div>
 
       <section className="cc-card">
         <Head eyebrow="ESPACIOS" title="Dónde está ocurriendo el trabajo" note="Los espacios reúnen artefactos, especialistas y contexto." />
