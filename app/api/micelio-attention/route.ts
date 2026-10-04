@@ -206,7 +206,7 @@ export async function GET() {
   );
   const commands = commandsResult.data || [];
 
-  const attention = queue.map((work: Row) => {
+  const attention = queue.filter((work: Row) => work.status !== "retry_wait").map((work: Row) => {
     const actor = actors.get(String(work.agent_slug)) || {
       slug: String(work.agent_slug),
       dotSlug: String(work.agent_slug),
