@@ -165,6 +165,8 @@ export async function GET() {
     const pendingApprovals = commands.filter(
       (row: Row) => row.actor === skill.slug && row.approval_status === "pending",
     ).length;
+    const rawState = selected?.state || (actorQueue.length ? actorQueue[0].status : "watching");
+    const publicState = rawState === "retry_wait" ? "working" : rawState;
 
     return {
       slug: skill.slug,
@@ -173,8 +175,8 @@ export async function GET() {
         .replace(/^LINKDOT\s*·?\s*/i, "")
         .replace(/^LINK\s*/i, ""),
       area: String(metadata.dot_area || metadata.stage_label || metadata.area || "Dirección").replaceAll("_", " "),
-      state: selected?.state || (actorQueue.length ? actorQueue[0].status : "watching"),
-      stateLabel: plainState(selected?.state || (actorQueue.length ? actorQueue[0].status : "watching")),
+      state: publicState,
+      stateLabel: rawState === "retry_wait" ? "Recuperándose y siguiendo" : plainState(publicState),
       focus: selected?.current_focus || actorQueue[0]?.reason || null,
       lastWakeAt: selected?.last_wake_at || null,
       lastSuccessAt: selected?.last_success_at || null,
@@ -244,14 +246,17 @@ export async function GET() {
     }
 
     if (event.event_type === "AGENT_WAKE_FAILED") {
+      const retryScheduled = Boolean(payload.retry_scheduled);
       return {
         id: event.id,
         at: event.occurred_at || event.received_at,
         actor: actor.name,
         actorSlug: actor.slug,
-        tone: "problem",
-        headline: `${actor.name} intentó trabajar, pero se encontró con un problema.`,
-        detail: failedDetail(payload.error, Boolean(payload.retry_scheduled)),
+        tone: retryScheduled ? "quiet" : "problem",
+        headline: retryScheduled
+          ? `${actor.name} tuvo una interrupción técnica y seguirá solo.`
+          : `${actor.name} intentó trabajar, pero se encontró con un problema.`,
+        detail: failedDetail(payload.error, retryScheduled),
         href: `/dots/${actor.dotSlug}`,
       };
     }
