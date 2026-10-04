@@ -1102,3 +1102,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .cc-approval-actions{flex-wrap:wrap}
   .cc-approval-copy small{white-space:normal;max-height:34px}
 }
+
+.cc-home-counters.is-three{grid-template-columns:repeat(3,1fr)}
+@media(max-width:900px){.cc-home-counters.is-three{grid-template-columns:1fr}}
