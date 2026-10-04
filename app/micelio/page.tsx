@@ -163,7 +163,11 @@ export default async function MicelioPage() {
 
     addNode({
       id,
-      label: String(meta.label || meta.display_label || skill?.name || labelForEntity(normalizedRow)),
+      label: String(
+        kind === "linkdot"
+          ? meta.display_label || skill?.name || meta.label || labelForEntity(normalizedRow)
+          : meta.label || meta.display_label || skill?.name || labelForEntity(normalizedRow),
+      ),
       kind,
       status: String(row.status || "active"),
       description: descriptionForEntity(normalizedRow),
