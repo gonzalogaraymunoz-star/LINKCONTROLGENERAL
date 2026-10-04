@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createStripeCheckoutSession, stripeConfigured } from "@/lib/payments/stripe";
 import { getCentralSupabase } from "@/lib/supabase/server";
+import { recordFinCheckoutCreated } from "@/lib/fin/ledger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +62,21 @@ export async function POST(request: NextRequest) {
       cancelUrl: `${origin}/fin?payment=cancelled&order_id=${encodeURIComponent(orderId)}`,
     });
 
+    const finRecord = await recordFinCheckoutCreated({
+      businessId: input.businessId,
+      productId: input.productId,
+      orderId,
+      amount: input.amount,
+      currency: "CLP",
+      provider: "stripe",
+      sessionId: result.sessionId,
+      paymentUrl: result.paymentUrl,
+      status: result.status,
+      paymentStatus: result.paymentStatus,
+      customerEmail: input.customerEmail || undefined,
+      source: "fin-panel",
+    });
+
     const supabase = getCentralSupabase();
     if (supabase) {
       await supabase.from("events").insert({
@@ -80,6 +96,7 @@ export async function POST(request: NextRequest) {
           currency: "CLP",
           session_id: result.sessionId,
           payment_url: result.paymentUrl,
+          fin_recorded: finRecord.recorded,
         },
       });
     }
