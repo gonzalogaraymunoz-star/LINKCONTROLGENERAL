@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createStripeCheckoutSession, stripeConfigured } from "@/lib/payments/stripe";
 import { getCentralSupabase } from "@/lib/supabase/server";
+import { recordFinCheckoutCreated } from "@/lib/fin/ledger";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,7 @@ function safeReturnUrl(value: string | undefined, fallback: string) {
   return url.toString();
 }
 
-async function auditPaymentLink(input: {
+async function legacyAudit(input: {
   businessId: string;
   productId: string;
   orderId: string;
@@ -77,6 +78,8 @@ export async function GET() {
     provider: "stripe",
     configured: stripeConfigured(),
     mode: process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown",
+    finLedger: true,
+    driveBackupQueue: true,
   });
 }
 
@@ -102,21 +105,37 @@ export async function POST(request: NextRequest) {
     const result = await createStripeCheckoutSession({
       ...input,
       currency: input.currency.toUpperCase(),
-      successUrl: safeReturnUrl(input.successUrl, `${origin}/?payment=success&order_id=${encodeURIComponent(input.orderId)}`),
-      cancelUrl: safeReturnUrl(input.cancelUrl, `${origin}/?payment=cancelled&order_id=${encodeURIComponent(input.orderId)}`),
+      successUrl: safeReturnUrl(input.successUrl, `${origin}/fin?payment=success&order_id=${encodeURIComponent(input.orderId)}`),
+      cancelUrl: safeReturnUrl(input.cancelUrl, `${origin}/fin?payment=cancelled&order_id=${encodeURIComponent(input.orderId)}`),
     });
 
-    const audited = await auditPaymentLink({
-      businessId: input.businessId,
-      productId: input.productId,
-      orderId: input.orderId,
-      amount: input.amount,
-      currency: input.currency,
-      sessionId: result.sessionId,
-      paymentUrl: result.paymentUrl,
-    });
+    const [finRecord, audited] = await Promise.all([
+      recordFinCheckoutCreated({
+        businessId: input.businessId,
+        productId: input.productId,
+        orderId: input.orderId,
+        amount: input.amount,
+        currency: input.currency,
+        provider: "stripe",
+        sessionId: result.sessionId,
+        paymentUrl: result.paymentUrl,
+        status: result.status,
+        paymentStatus: result.paymentStatus,
+        customerEmail: input.customerEmail,
+        source: "payment-api",
+      }),
+      legacyAudit({
+        businessId: input.businessId,
+        productId: input.productId,
+        orderId: input.orderId,
+        amount: input.amount,
+        currency: input.currency,
+        sessionId: result.sessionId,
+        paymentUrl: result.paymentUrl,
+      }),
+    ]);
 
-    return NextResponse.json({ ok: true, result, audited });
+    return NextResponse.json({ ok: true, result, audited, finRecord });
   } catch (error) {
     const message = error instanceof Error ? error.message : "checkout_creation_failed";
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
