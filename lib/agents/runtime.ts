@@ -3,7 +3,11 @@ import { z } from "zod";
 import { getCentralSupabase } from "@/lib/supabase/server";
 
 const ROOT_CONTROL_ID = "00000000-0000-0000-0000-000000000001";
-const MODEL = process.env.LINK_AGENT_MODEL || "poolside/laguna-s-2.1-free";
+const MODEL = process.env.LINK_AGENT_MODEL || "openai/gpt-5.6-sol";
+const FALLBACK_MODELS = (process.env.LINK_AGENT_FALLBACK_MODELS || "google/gemini-3.6-flash,anthropic/claude-sonnet-5")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const INTERNAL_ACTIONS = new Set([
   "stage.diagnosis.record",
@@ -642,9 +646,7 @@ export async function wakeAgent(input: WakeInput) {
     },
   });
 
-  const agent = new ToolLoopAgent({
-    model: MODEL,
-    instructions: [
+  const instructions = [
       `You are ${skill.name} inside the LINK ecosystem.`,
       stageKey ? `You are responsible for the ${stageKey} stage only.` : "You are LINK Director and may diagnose across stages.",
       "You wake only from the persistent LINK work queue: either a routed real event or a scheduled mission review.",
@@ -674,18 +676,47 @@ export async function wakeAgent(input: WakeInput) {
         : "If a governed state change is truly necessary, PROPOSE it for human approval.",
       "For INTERNAL_WORK provide internalSummary, up to 5 concise findings, and nextStep. Do not repeat the same conclusion already visible in recent events.",
       "Call decide exactly once.",
-    ].join("\n"),
-    tools: { decide: decisionTool },
-    toolChoice: "required",
-    stopWhen: stepCountIs(1),
-  });
+    ].join("\n");
 
-  const result = await agent.generate({
-    prompt:
-      "Evaluate this LINK wake context and make one governed decision. Context JSON follows:\n" +
-      JSON.stringify(context),
-    timeout: { totalMs: 100_000, stepMs: 90_000 },
-  });
+  const prompt =
+    "Evaluate this LINK wake context and make one governed decision. Context JSON follows:\n" +
+    JSON.stringify(context);
+
+  const modelCandidates = Array.from(new Set([MODEL, ...FALLBACK_MODELS]));
+  let result: any = null;
+  let usedModel = MODEL;
+  let lastModelError: any = null;
+
+  for (const modelId of modelCandidates) {
+    usedModel = modelId;
+    const agent = new ToolLoopAgent({
+      model: modelId,
+      instructions,
+      tools: { decide: decisionTool },
+      toolChoice: "required",
+      stopWhen: stepCountIs(1),
+    });
+
+    try {
+      result = await agent.generate({
+        prompt,
+        timeout: { totalMs: 100_000, stepMs: 90_000 },
+      });
+      break;
+    } catch (error) {
+      lastModelError = error;
+      // If the tool already persisted a governed decision, do not ask a
+      // fallback model to decide again. Preserve idempotency.
+      if (decisionResult) {
+        result = { text: "" };
+        break;
+      }
+    }
+  }
+
+  if (!result) {
+    throw lastModelError || new Error("all_agent_models_failed");
+  }
 
   if (!decisionResult) {
     if (internalReviewOnly && thalamusContext) {
@@ -768,7 +799,7 @@ export async function wakeAgent(input: WakeInput) {
   return {
     ok: true,
     agentSlug: input.agentSlug,
-    model: MODEL,
+    model: usedModel,
     decision: decisionResult,
     finalText: result.text || "",
   };
