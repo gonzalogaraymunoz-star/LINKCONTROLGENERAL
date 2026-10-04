@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import LinkPulseButton from "@/components/LinkPulseButton";
 import LiveLinkFeed from "@/components/LiveLinkFeed";
+import CompactApprovals from "@/components/CompactApprovals";
 
 export type AgentCapability = {
   capability_key: string;
@@ -442,6 +443,7 @@ function HomeView({ actors, allAgents, summary, loading, go }: {
       </section>
 
       <LiveLinkFeed />
+      <CompactApprovals />
 
       <div className="cc-home-counters">
         <button onClick={() => go("Actores")}><strong>{actors.length}</strong><span>actores principales</span><small>ver quién hace qué →</small></button>
