@@ -214,7 +214,7 @@ function stateLabel(value: string) {
 
 function isProblemState(value: string) {
   const state = normalize(value);
-  return /block|attention|warn|retry|proposed|draft|failed|error/.test(state);
+  return /block|attention|warn|proposed|draft|failed|error/.test(state);
 }
 
 function evidenceText(item: any) {
