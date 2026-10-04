@@ -107,6 +107,8 @@ export async function GET() {
   const commands = commandsResult.data || [];
   const handoffs = handoffsResult.data || [];
   const events = eventsResult.data || [];
+  const internalProviders = new Set(["agent-runtime", "control-central", "link_game", "link-pulse", "control"]);
+  const externalEvents = events.filter((row: Row) => !internalProviders.has(String(row.source_provider || "")));
 
   const rows = businesses.map((business: Row) => {
     const businessSources = sources.filter((row: Row) => row.business_id === business.id);
@@ -125,7 +127,7 @@ export async function GET() {
     const blockedHandoffs = handoffs.filter(
       (row: Row) => row.business_global_id === business.global_id && row.status === "blocked",
     );
-    const businessEvents = events.filter((row: Row) => row.global_id === business.global_id);
+    const businessEvents = externalEvents.filter((row: Row) => row.global_id === business.global_id);
     const flowSource = businessSources.find((row: Row) => row.metadata?.flow_state);
     const sourceFeeds = activeSources.filter((row: Row) => row.feeds_interactions || row.feeds_sales_leads);
 
