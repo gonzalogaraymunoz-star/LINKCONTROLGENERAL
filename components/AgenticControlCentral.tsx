@@ -529,6 +529,47 @@ function ActorCard({ actor, allAgents, production }: { actor: AgentRecord; allAg
   const prod = production.find((row: any) => row.agentSlug === actor.slug) || {};
   const current = prod?.missions?.current || null;
   const subdots = allAgents.filter((item) => item.metadata?.parent_dot === operationalSlug(actor));
+  const isDirector = actor.slug === "link-director";
+
+  if (isDirector) {
+    const directDots = orderedActors(allAgents).filter((item) => item.slug !== "link-director");
+    return (
+      <article className="cc-actor-card cc-director-card">
+        <header>
+          <div className="cc-actor-avatar is-director">L·</div>
+          <div><span className="cc-eyebrow">DIRECCIÓN DE LINK</span><h2>Director</h2></div>
+          <Status value={actor.runtimeState?.mode || actor.metadata?.autonomy_mode || actor.status} />
+        </header>
+
+        <div className="cc-director-body">
+          <div>
+            <small>SU FUNCIÓN</small>
+            <p>{actor.description}</p>
+          </div>
+          <div className="cc-director-now">
+            <small>AHORA</small>
+            <b>{current?.title || "Observando el organismo"}</b>
+            <span>{current ? humanStatus(current.status) : "Disponible"}</span>
+          </div>
+        </div>
+
+        <div className="cc-director-team">
+          <small>COORDINA A</small>
+          <div>
+            {directDots.map((dot) => (
+              <a key={dot.id} href={"/dots/" + operationalSlug(dot)}>{shortActorName(dot)} →</a>
+            ))}
+          </div>
+        </div>
+
+        <footer>
+          <span>No ejecuta el trabajo de los demás LINKDOT.</span>
+          <a href={"/dots/" + operationalSlug(actor)}>Trabajar con Director →</a>
+        </footer>
+      </article>
+    );
+  }
+
   return (
     <article className="cc-actor-card">
       <header>
@@ -536,13 +577,32 @@ function ActorCard({ actor, allAgents, production }: { actor: AgentRecord; allAg
         <div><span className="cc-eyebrow">LINKDOT · {actorArea(actor)}</span><h2>{shortActorName(actor)}</h2></div>
         <Status value={actor.runtimeState?.mode || actor.metadata?.autonomy_mode || actor.status} />
       </header>
-      <div className="cc-role-flow">
-        <div><small>RECIBE</small><p>{actorEntry(actor)}</p></div><span>→</span>
-        <div className="is-main"><small>HACE</small><p>{actorResponsibility(actor)}</p></div><span>→</span>
-        <div><small>ENTREGA</small><p>{actorExit(actor)}</p></div>
+
+      <div className="cc-role-story">
+        <div>
+          <small>RECIBE</small>
+          <p>{actorEntry(actor)}</p>
+        </div>
+        <div className="is-main">
+          <small>SU TRABAJO</small>
+          <p>{actorResponsibility(actor)}</p>
+        </div>
+        <div>
+          <small>ENTREGA</small>
+          <p>{actorExit(actor)}</p>
+        </div>
       </div>
-      <div className="cc-actor-now"><small>AHORA</small><b>{current?.title || "Sin misión activa"}</b><span>{current ? humanStatus(current.status) : "Disponible"}</span></div>
-      <footer><span>{subdots.length} especialista{subdots.length === 1 ? "" : "s"}</span><a href={"/dots/" + operationalSlug(actor)}>Trabajar con {shortActorName(actor)} →</a></footer>
+
+      <div className="cc-actor-now">
+        <small>AHORA</small>
+        <b>{current?.title || "Sin misión activa"}</b>
+        <span>{current ? humanStatus(current.status) : "Disponible"}</span>
+      </div>
+
+      <footer>
+        <span>{subdots.length} especialista{subdots.length === 1 ? "" : "s"}</span>
+        <a href={"/dots/" + operationalSlug(actor)}>Trabajar con {shortActorName(actor)} →</a>
+      </footer>
     </article>
   );
 }
