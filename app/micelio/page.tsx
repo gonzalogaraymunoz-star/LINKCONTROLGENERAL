@@ -75,6 +75,7 @@ export default async function MicelioPage() {
   const [
     entitiesResult,
     relationsResult,
+    skillsResult,
     workspacesResult,
     subdotsResult,
     artifactsResult,
@@ -82,7 +83,7 @@ export default async function MicelioPage() {
   ] = await Promise.all([
     supabase
       .from("ecosystem_entities")
-      .select("id,global_id,entity_type,status,metadata,created_at,updated_at")
+      .select("id,global_id,owner_record_id,entity_type,status,metadata,created_at,updated_at")
       .neq("status", "archived")
       .order("updated_at", { ascending: false })
       .limit(450),
@@ -92,6 +93,10 @@ export default async function MicelioPage() {
       .neq("state", "archived")
       .order("updated_at", { ascending: false })
       .limit(700),
+    supabase
+      .from("link_skills")
+      .select("id,slug,name,status,metadata")
+      .eq("status", "active"),
     supabase
       .from("link_dot_workspaces")
       .select("id,workspace_key,app_key,name,description,owner_linkdot_slug,owner_director_slug,route,status,metadata,updated_at")
@@ -117,7 +122,11 @@ export default async function MicelioPage() {
   const edges: GraphEdge[] = [];
   const nodeIds = new Set<string>();
   const edgeKeys = new Set<string>();
+  const edgePairs = new Set<string>();
   const aliasToId = new Map<string, string>();
+  const skillById = new Map(
+    (skillsResult.data || []).map((skill: Row) => [String(skill.id), skill]),
+  );
   const businessIdToNodeId = new Map<string, string>();
   const subdotIdToNodeId = new Map<string, string>();
 
@@ -137,13 +146,16 @@ export default async function MicelioPage() {
     const key = edge.source + "|" + edge.target + "|" + edge.relation;
     if (edgeKeys.has(key)) return;
     edgeKeys.add(key);
+    edgePairs.add(edge.source + "|" + edge.target);
     edges.push(edge);
   }
 
   for (const row of entitiesResult.data || []) {
     const id = String(row.global_id);
-    const meta = row.metadata || {};
-    const kind = kindForEntity(row);
+    const skill = skillById.get(String(row.owner_record_id || ""));
+    const meta = { ...(skill?.metadata || {}), ...(row.metadata || {}) };
+    const normalizedRow = { ...row, metadata: meta };
+    const kind = kindForEntity(normalizedRow);
     const href =
       kind === "director" || kind === "linkdot" || kind === "linksubdot" || kind === "agent"
         ? "/dots/" + (meta.dot_slug || meta.slug || "link-director")
@@ -151,10 +163,10 @@ export default async function MicelioPage() {
 
     addNode({
       id,
-      label: labelForEntity(row),
+      label: String(meta.label || meta.display_label || skill?.name || labelForEntity(normalizedRow)),
       kind,
       status: String(row.status || "active"),
-      description: descriptionForEntity(row),
+      description: descriptionForEntity(normalizedRow),
       source: "ecosystem_entities",
       href,
       updatedAt: row.updated_at || row.created_at || null,
@@ -165,6 +177,8 @@ export default async function MicelioPage() {
     addAlias(meta.slug, id);
     addAlias(meta.dot_slug, id);
     addAlias(meta.label, id);
+    addAlias(meta.display_label, id);
+    addAlias(skill?.slug, id);
   }
 
   for (const row of businessesResult.data || []) {
@@ -219,10 +233,12 @@ export default async function MicelioPage() {
   for (const row of entitiesResult.data || []) {
     const child = aliasToId.get(String(row.global_id));
     if (!child) continue;
-    const meta = row.metadata || {};
+    const skill = skillById.get(String(row.owner_record_id || ""));
+    const meta = { ...(skill?.metadata || {}), ...(row.metadata || {}) };
     const parentAlias = meta.parent_agent || meta.parent_dot;
     const parent = parentAlias ? aliasToId.get(String(parentAlias)) : null;
     if (!parent || parent === child) continue;
+    if (edgePairs.has(parent + "|" + child)) continue;
 
     addEdge({
       id: "architecture:" + parent + ":" + child,
