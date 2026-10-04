@@ -121,7 +121,7 @@ export default function CompactApprovals() {
 
   if (!token || !item) {
     return (
-      <section className="cc-approval-strip">
+      <section id="approvals" className="cc-approval-strip">
         <div className="cc-approval-dot" />
         <div className="cc-approval-copy">
           <span className="cc-eyebrow">NECESITAN DE TI</span>
@@ -134,7 +134,7 @@ export default function CompactApprovals() {
   }
 
   return (
-    <section className="cc-approval-strip is-ready">
+    <section id="approvals" className="cc-approval-strip is-ready">
       <div className="cc-approval-dot" />
       <div className="cc-approval-copy">
         <span className="cc-eyebrow">NECESITA DE TI · 1 DE {state.count}</span>
