@@ -334,6 +334,10 @@ export default function AgenticControlCentral({ initialAgents }: { initialAgents
                   <Icon name="grid" />
                   <span className="cc-nav-copy"><b>LINK Guide</b><small>Mapa y direcciones</small></span>
                 </a>
+                <a className="cc-nav-item" href="/fin">
+                  <Icon name="pulse" />
+                  <span className="cc-nav-copy"><b>FIN · Finanzas</b><small>Mesa financiera y cobros</small></span>
+                </a>
               </>
             ) : null}
           </div>
