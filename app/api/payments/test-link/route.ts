@@ -32,9 +32,9 @@ export async function GET(request: NextRequest) {
       generatedBy: "LINKSUBDOT",
       testMode: true,
       amount: 1000,
-      currency: "CLP",
       orderId,
       ...result,
+      currency: "CLP",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "checkout_creation_failed";
