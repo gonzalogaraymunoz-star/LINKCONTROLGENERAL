@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import styles from "./DotWorkspacePanel.module.css";
+import DotActionQueue from "@/components/DotActionQueue";
 
 type Row = Record<string, any>;
 
@@ -17,6 +18,7 @@ type DotData = {
   evidence: Row[];
   grants: Row[];
   operatingStates: Row[];
+  workQueue: Row[];
   capabilities: Row[];
   handoffs: Row[];
   memories: Row[];
@@ -126,6 +128,7 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
     return grouped;
   }, [data.messages]);
 
+  const actionWork = data.workQueue || [];
   const activeMissions = data.missions.filter(
     (mission) => !["completed", "cancelled", "archived"].includes(String(mission.status)),
   );
@@ -318,9 +321,17 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
             <>
               <section className={styles.hero}>
                 <div className={styles.heroCopy}>
-                  <span className={styles.eyebrow}>TU ACTOR EN LINK</span>
-                  <h1>Hola. Soy {shortName}.</h1>
-                  <p>{does}</p>
+                  <span className={styles.eyebrow}>LINKDOT EN ACCIÓN</span>
+                  <h1>
+                    {actionWork.length
+                      ? `${shortName}: ${actionWork.length} asunto${actionWork.length === 1 ? "" : "s"} activo${actionWork.length === 1 ? "" : "s"}.`
+                      : `${shortName}: observando.`}
+                  </h1>
+                  <p>
+                    {actionWork.length
+                      ? "Primero resolvemos lo que está ocurriendo ahora. La explicación del DOT queda debajo."
+                      : "No hay trabajo material que requiera intervención. Sigo observando señales reales dentro de mi responsabilidad."}
+                  </p>
                   <div className={styles.ready}>
                     <span />
                     {metadata.runtime_state === "paused" || agent.status === "paused"
@@ -338,6 +349,17 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
                   </div>
                   <small>{area.replaceAll("_", " ")}</small>
                 </div>
+              </section>
+
+              <section className={styles.section}>
+                <header className={styles.sectionHead}>
+                  <div>
+                    <span className={styles.eyebrow}>ACCIÓN AHORA</span>
+                    <h2>{actionWork.length ? "Trabajo que requiere movimiento" : "Sin intervención pendiente"}</h2>
+                  </div>
+                  <p>Aprobar, desbloquear o seguir la ejecución. Esto viene de la cola viva de Supabase.</p>
+                </header>
+                <DotActionQueue workQueue={actionWork} commands={data.commands} />
               </section>
 
               <section className={styles.section}>

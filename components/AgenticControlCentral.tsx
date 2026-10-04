@@ -314,8 +314,8 @@ export default function AgenticControlCentral({ initialAgents }: { initialAgents
         </header>
 
         <div className="cc-side-scroll">
-          <NavGroup label="TRABAJAR" items={PRIMARY} section={section} go={go} collapsed={collapsed} />
-          <NavGroup label="CONTEXTO" items={CONTEXT} section={section} go={go} collapsed={collapsed} />
+          <NavGroup label="NAVEGAR" items={PRIMARY} section={section} go={go} collapsed={collapsed} />
+          <NavGroup label="SPACES · CONTEXTO" items={CONTEXT} section={section} go={go} collapsed={collapsed} />
 
           <div className="cc-nav-group">
             <button className="cc-more-toggle" onClick={() => setMoreOpen((v) => !v)}>
@@ -339,7 +339,7 @@ export default function AgenticControlCentral({ initialAgents }: { initialAgents
           </div>
 
           <div className="cc-actors-quick">
-            <div className="cc-side-label">ACTORES</div>
+            <div className="cc-side-label">DOTS</div>
             {actors.map((actor) => (
               <a key={actor.id} href={"/dots/" + operationalSlug(actor)} title={collapsed ? shortActorName(actor) : undefined}>
                 <span className="cc-actor-pip" />
@@ -413,35 +413,95 @@ function HomeView({ actors, summary, go }: {
     ["approved", "active", "blocked", "waiting_evidence"].includes(String(mission.status)),
   );
   const spaces = summary?.dotWorkspaces || [];
+  const blocked = missions.filter((mission: any) =>
+    ["blocked", "waiting_evidence"].includes(String(mission.status)),
+  );
+  const working = missions.filter((mission: any) =>
+    ["approved", "active"].includes(String(mission.status)),
+  );
 
   return (
-    <section className="cc-stack">
-      <section className="cc-home-hero">
-        <div>
-          <span className="cc-eyebrow">LINK · CONTROL CENTRAL</span>
-          <h1>Aquí ves quién hace qué.</h1>
-          <p>Control Central te muestra qué actor está a cargo, qué está ocurriendo y dónde continuar sin tener que entender la ingeniería interna.</p>
+    <section className="cc-stack cc-od-home">
+      <section className="cc-od-hero">
+        <div className="cc-od-hero-copy">
+          <span className="cc-eyebrow">LINK · ORGANISMO VIVO</span>
+          <h1>¿Qué necesita LINK de mí ahora?</h1>
+          <p>Aquí no vienes a mirar paneles. Vienes a aprobar, desbloquear, comprobar o poner a trabajar al actor correcto.</p>
         </div>
-        <div className="cc-home-orbit" aria-hidden="true"><span className="cc-orbit-core">L·</span><i /><i /><i /></div>
+        <div className="cc-od-hero-actions">
+          <a className="cc-od-primary" href="/dots/link-director">Hablar con Director →</a>
+          <button onClick={() => go("Trabajo")}>Ver trabajo en curso</button>
+        </div>
       </section>
 
-      <LiveLinkFeed />
       <CompactApprovals />
 
-      <div className="cc-home-counters is-three">
-        <button onClick={() => go("Actores")}><strong>{actors.length}</strong><span>actores principales</span><small>ver quién hace qué →</small></button>
-        <button onClick={() => go("Trabajo")}><strong>{missions.length}</strong><span>misiones en curso</span><small>ver trabajo real →</small></button>
-        <button onClick={() => go("Espacios")}><strong>{spaces.length}</strong><span>espacios de trabajo</span><small>ver dónde trabajan →</small></button>
-      </div>
-
-      <section className="cc-card">
-        <Head eyebrow="RECORRIDO LINK" title="Cada actor cuida una parte del camino" note="Toca un actor para entrar a su propio espacio." />
-        <ActorJourney actors={actors.filter((actor) => actor.slug !== "link-director")} />
+      <section className="cc-card cc-flow-health-card">
+        <Head
+          eyebrow="ÓRGANOS · ACCIÓN"
+          title="Qué negocio necesita intervención"
+          note="Cada fila muestra el cuello de botella real y dónde actuar. Si no hay señal real, LINK no fabrica actividad."
+        />
+        <BusinessFlowHealth />
       </section>
 
-      <section className="cc-card">
-        <Head eyebrow="ESPACIOS" title="Dónde está ocurriendo el trabajo" note="Los espacios reúnen artefactos, especialistas y contexto." />
-        <WorkspaceStrip summary={summary} actors={actors} />
+      <div className="cc-od-status-row">
+        <button className={blocked.length ? "is-attention" : ""} onClick={() => go("Trabajo")}>
+          <strong>{blocked.length}</strong>
+          <span>bloqueos o evidencias pendientes</span>
+          <small>{blocked.length ? "resolver ahora →" : "sin bloqueo material"}</small>
+        </button>
+        <button onClick={() => go("Trabajo")}>
+          <strong>{working.length}</strong>
+          <span>misiones moviéndose</span>
+          <small>ver ejecución →</small>
+        </button>
+        <button onClick={() => go("Espacios")}>
+          <strong>{spaces.length}</strong>
+          <span>Spaces de trabajo</span>
+          <small>abrir espacios →</small>
+        </button>
+        <button onClick={() => go("Actores")}>
+          <strong>{actors.length}</strong>
+          <span>Dots principales</span>
+          <small>abrir especialistas →</small>
+        </button>
+      </div>
+
+      <div className="cc-od-two">
+        <section className="cc-card">
+          <Head
+            eyebrow="DOTS"
+            title="Quién puede hacerse cargo"
+            note="Cada Dot tiene responsabilidad, memoria, capacidades y un espacio propio de trabajo."
+          />
+          <ActorJourney actors={actors.filter((actor) => actor.slug !== "link-director")} />
+        </section>
+
+        <section className="cc-card">
+          <Head
+            eyebrow="SPACES"
+            title="Dónde vive el trabajo"
+            note="Negocios, artefactos y especialistas reunidos por contexto; no por tecnología."
+          />
+          <WorkspaceStrip summary={summary} actors={actors} />
+        </section>
+      </div>
+
+      <section className="cc-card cc-od-live-card">
+        <Head
+          eyebrow="ORGANISMO EN VIVO"
+          title="Qué está ocurriendo mientras trabajamos"
+          note="Señales, movimientos y resultados reales. Actividad no equivale a progreso."
+        />
+        <LiveLinkFeed />
+      </section>
+
+      <section className="cc-od-footer-actions">
+        <button onClick={() => go("Negocios")}><b>Órganos</b><span>Ver negocios y su estado →</span></button>
+        <button onClick={() => go("Conversaciones")}><b>Threads</b><span>Recuperar contexto persistente →</span></button>
+        <button onClick={() => go("Evidencia")}><b>Evidencia</b><span>Comprobar qué ocurrió de verdad →</span></button>
+        <button onClick={() => go("Sistema")}><b>Organismo</b><span>Diagnóstico de sistemas →</span></button>
       </section>
     </section>
   );

@@ -87,6 +87,7 @@ async function loadDot(slug: string) {
     missionsResult,
     grantsResult,
     stateResult,
+    workQueueResult,
     namespaceResult,
     capabilitiesResult,
     handoffsResult,
@@ -125,6 +126,14 @@ async function loadDot(slug: string) {
       .eq("agent_slug", skill.slug)
       .order("updated_at", { ascending: false })
       .limit(20),
+    supabase
+      .from("agent_work_queue")
+      .select("id,agent_slug,stage_key,business_global_id,status,work_type,priority,reason,last_error,attempt_count,max_attempts,command_id,mission_id,created_at,updated_at,next_attempt_at")
+      .eq("agent_slug", skill.slug)
+      .in("status", ["queued","processing","retry_wait","blocked","awaiting_approval"])
+      .order("priority", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .limit(50),
     supabase
       .from("memory_namespaces")
       .select("*")
@@ -284,6 +293,7 @@ async function loadDot(slug: string) {
     evidence: evidenceResult.data ?? [],
     grants: grantsResult.data ?? [],
     operatingStates: stateResult.data ?? [],
+    workQueue: workQueueResult.data ?? [],
     capabilities: capabilitiesResult.data ?? [],
     handoffs: handoffsResult.data ?? [],
     memories: memoriesResult.data ?? [],
