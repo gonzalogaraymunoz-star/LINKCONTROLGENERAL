@@ -36,6 +36,32 @@ type FinEvent = {
   recorded_at: string;
 };
 
+type FinBusiness = {
+  business_key: string;
+  display_name: string;
+  description: string | null;
+  aliases: string[] | null;
+  default_currency: string;
+  active: boolean;
+  sort_order: number;
+  metadata: Record<string, unknown> | null;
+};
+
+type PaymentRoute = {
+  id: string;
+  business_key: string;
+  method_type: string;
+  provider: string;
+  label: string;
+  account_ref: string | null;
+  currency: string;
+  enabled: boolean;
+  priority: number;
+  settlement_mode: string | null;
+  reconciliation_mode: string;
+  metadata: Record<string, unknown> | null;
+};
+
 function money(amount: number | string | null | undefined, currency = "CLP") {
   if (amount == null) return "—";
   const numeric = typeof amount === "string" ? Number(amount) : amount;
@@ -63,16 +89,48 @@ function state(payment: FinPayment) {
   return { label: "Abierto", tone: "live" };
 }
 
+function refsFor(business: FinBusiness) {
+  return new Set([business.business_key, business.display_name, ...(Array.isArray(business.aliases) ? business.aliases : [])]);
+}
+
+function belongsToBusiness(ref: string | null, business: FinBusiness) {
+  return Boolean(ref && refsFor(business).has(ref));
+}
+
+function routeInitial(provider: string) {
+  if (provider.toLowerCase() === "mercado_pago") return "MP";
+  return provider.slice(0, 2).toUpperCase();
+}
+
 export default async function FinPage({ searchParams }: { searchParams?: Promise<Search> }) {
   const params = (await searchParams) || {};
-  const memory = await readFinMemory(50);
-  const payments = memory.payments as FinPayment[];
-  const recentEvents = memory.recentEvents as FinEvent[];
+  const memory = await readFinMemory(100);
+  const allPayments = memory.payments as FinPayment[];
+  const allEvents = memory.recentEvents as FinEvent[];
+  const businesses = memory.businesses as FinBusiness[];
+  const paymentRoutes = memory.paymentRoutes as PaymentRoute[];
+
+  const requestedBusiness = typeof params.business === "string" ? params.business : "all";
+  const selectedBusiness = businesses.find((item) => item.business_key === requestedBusiness) || null;
+  const scopeLabel = selectedBusiness?.display_name || "Todos los negocios";
+
+  const payments = selectedBusiness
+    ? allPayments.filter((item) => belongsToBusiness(item.business_ref, selectedBusiness))
+    : allPayments;
+  const recentEvents = selectedBusiness
+    ? allEvents.filter((item) => belongsToBusiness(item.business_ref, selectedBusiness))
+    : allEvents;
+
   const paid = payments.filter((item) => item.payment_status === "paid");
   const open = payments.filter((item) => item.status === "open" && item.payment_status !== "paid");
   const clpPaid = paid
     .filter((item) => (item.currency || "").toLowerCase() === "clp")
     .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  const activeRoutes = selectedBusiness
+    ? paymentRoutes.filter((route) => route.business_key === selectedBusiness.business_key)
+    : paymentRoutes;
+
   const isTest = process.env.VERCEL_ENV !== "production";
   const created = typeof params.created === "string" ? params.created : "";
   const paymentResult = typeof params.payment === "string" ? params.payment : "";
@@ -90,11 +148,25 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
         <nav className={styles.nav}>
           <small>FIN · FINANZAS</small>
           <a className={styles.active} href="#resumen"><i>01</i><span><b>Resumen</b><em>Vista ejecutiva</em></span></a>
-          <a href="#cobros"><i>02</i><span><b>Cobros</b><em>Memoria operativa</em></span></a>
-          <a href="#mesa"><i>03</i><span><b>Mesa FIN</b><em>Trabajo operativo</em></span></a>
-          <a href="#inteligencia"><i>04</i><span><b>Inteligencia</b><em>Cerebro financiero</em></span></a>
+          <a href="#negocios"><i>02</i><span><b>Negocios</b><em>Mesas independientes</em></span></a>
+          <a href="#cobros"><i>03</i><span><b>Cobros</b><em>Memoria operativa</em></span></a>
+          <a href="#mesa"><i>04</i><span><b>Mesa FIN</b><em>Trabajo operativo</em></span></a>
           <a href="#registro"><i>05</i><span><b>Registro</b><em>Gestos y respaldo</em></span></a>
-          <a href="#pasarelas"><i>06</i><span><b>Pasarelas</b><em>Rutas de cobro</em></span></a>
+          <a href="#pasarelas"><i>06</i><span><b>Pasarelas</b><em>Rutas por negocio</em></span></a>
+        </nav>
+
+        <nav className={styles.businessNav}>
+          <small>NEGOCIOS</small>
+          <a className={!selectedBusiness ? styles.businessNavActive : ""} href="/fin"><span>∞</span><b>Todos</b></a>
+          {businesses.map((business) => (
+            <a
+              className={selectedBusiness?.business_key === business.business_key ? styles.businessNavActive : ""}
+              href={`/fin?business=${encodeURIComponent(business.business_key)}`}
+              key={business.business_key}
+            >
+              <span>{business.display_name.slice(0, 1).toUpperCase()}</span><b>{business.display_name}</b>
+            </a>
+          ))}
         </nav>
 
         <div className={styles.sidebarBottom}>
@@ -105,42 +177,78 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
 
       <section className={styles.main}>
         <header className={styles.topbar}>
-          <div><small>LINK CONTROL CENTRAL / FIN</small><b>Panel de Finanzas</b></div>
+          <div><small>LINK CONTROL CENTRAL / FIN / {scopeLabel.toUpperCase()}</small><b>{scopeLabel}</b></div>
           <div className={styles.topActions}>
             <span className={isTest ? styles.testBadge : styles.liveBadge}>{isTest ? "ENTORNO TEST" : "LIVE"}</span>
-            <a href="/fin">Actualizar</a>
+            <a href={selectedBusiness ? `/fin?business=${encodeURIComponent(selectedBusiness.business_key)}` : "/fin"}>Actualizar</a>
           </div>
         </header>
 
         <div className={styles.canvas}>
-          {created ? <div className={styles.notice}>Nuevo checkout creado. FIN guardó el gesto, actualizó su memoria y lo dejó en cola de respaldo.</div> : null}
-          {paymentResult === "success" ? <div className={styles.notice}>El cliente volvió desde Stripe. La confirmación definitiva quedará en FIN mediante el evento firmado del proveedor.</div> : null}
+          {created ? <div className={styles.notice}>Nuevo checkout creado. FIN guardó el gesto dentro de la mesa del negocio y actualizó su memoria.</div> : null}
+          {paymentResult === "success" ? <div className={styles.notice}>El cliente volvió desde la pasarela. FIN conservará la confirmación definitiva como un nuevo evento financiero.</div> : null}
           {memory.error ? <div className={styles.error}><b>Memoria FIN requiere atención.</b><span>{memory.error}</span></div> : null}
 
           <section id="resumen" className={styles.hero}>
             <div>
-              <span className={styles.eyebrow}>FIN · MESA FINANCIERA</span>
-              <h1>Todo el dinero de LINK, con memoria y evidencia.</h1>
-              <p>FIN responde desde su propia memoria operativa. Cada gesto financiero queda registrado como evento inmutable y los documentos se preparan para respaldo en Drive.</p>
+              <span className={styles.eyebrow}>FIN · {selectedBusiness ? "MESA DE NEGOCIO" : "CONTROL CONSOLIDADO"}</span>
+              <h1>{selectedBusiness ? selectedBusiness.display_name : "Cada negocio, su propia forma de cobrar."}</h1>
+              <p>
+                {selectedBusiness
+                  ? `Esta mesa separa los cobros, pasarelas, conciliación y memoria financiera de ${selectedBusiness.display_name}.`
+                  : "FIN consolida todo LINK, pero cada negocio opera en una mesa independiente con sus propias pasarelas, métodos de cobro y reglas."}
+              </p>
             </div>
             <div className={styles.heroState}>
               <span className={styles.liveDot} />
-              <b>Cerebro financiero</b>
-              <small>{memory.ledgerCount} gestos registrados</small>
+              <b>{selectedBusiness ? "Mesa financiera activa" : "Cerebro financiero"}</b>
+              <small>{payments.length} movimientos · {activeRoutes.filter((route) => route.enabled).length} rutas activas</small>
             </div>
           </section>
 
+          <section id="negocios" className={styles.businessGrid}>
+            <a className={!selectedBusiness ? styles.businessCardActive : styles.businessCard} href="/fin">
+              <div className={styles.businessIcon}>∞</div>
+              <small>CONSOLIDADO</small>
+              <b>Todos los negocios</b>
+              <span>{businesses.length} mesas financieras</span>
+              <em>Ver todo FIN →</em>
+            </a>
+            {businesses.map((business) => {
+              const businessPayments = allPayments.filter((item) => belongsToBusiness(item.business_ref, business));
+              const businessPaid = businessPayments.filter((item) => item.payment_status === "paid");
+              const total = businessPaid
+                .filter((item) => (item.currency || "").toUpperCase() === business.default_currency.toUpperCase())
+                .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+              const routes = paymentRoutes.filter((route) => route.business_key === business.business_key && route.enabled);
+              const active = selectedBusiness?.business_key === business.business_key;
+              return (
+                <a
+                  className={active ? styles.businessCardActive : styles.businessCard}
+                  href={`/fin?business=${encodeURIComponent(business.business_key)}`}
+                  key={business.business_key}
+                >
+                  <div className={styles.businessIcon}>{business.display_name.slice(0, 2).toUpperCase()}</div>
+                  <small>NEGOCIO</small>
+                  <b>{business.display_name}</b>
+                  <span>{money(total, business.default_currency)} · {routes.length} ruta{routes.length === 1 ? "" : "s"}</span>
+                  <em>Abrir mesa →</em>
+                </a>
+              );
+            })}
+          </section>
+
           <section className={styles.metrics}>
-            <article><small>Cobrado · CLP</small><strong>{money(clpPaid, "CLP")}</strong><span>{paid.length} cobro{paid.length === 1 ? "" : "s"} confirmado{paid.length === 1 ? "" : "s"}</span></article>
-            <article><small>Cobros abiertos</small><strong>{open.length}</strong><span>memoria FIN, sin consultar Stripe</span></article>
-            <article><small>Gestos registrados</small><strong>{memory.ledgerCount}</strong><span>bitácora append-only</span></article>
+            <article><small>Cobrado · {scopeLabel}</small><strong>{money(clpPaid, "CLP")}</strong><span>{paid.length} cobro{paid.length === 1 ? "" : "s"} confirmado{paid.length === 1 ? "" : "s"}</span></article>
+            <article><small>Cobros abiertos</small><strong>{open.length}</strong><span>solo en esta mesa</span></article>
+            <article><small>Rutas de cobro</small><strong>{activeRoutes.filter((route) => route.enabled).length}</strong><span>pasarelas y métodos activos</span></article>
             <article><small>Respaldo Drive</small><strong>{memory.pendingBackups}</strong><span>{memory.failedBackups ? `${memory.failedBackups} con error` : "pendientes de sincronizar"}</span></article>
           </section>
 
           <div className={styles.grid}>
             <section id="cobros" className={styles.cardWide}>
               <header className={styles.sectionHead}>
-                <div><small>MEMORIA DE COBROS</small><h2>Estado financiero rápido</h2></div>
+                <div><small>CASILLA DE COBROS · {scopeLabel.toUpperCase()}</small><h2>Movimientos de esta mesa</h2></div>
                 <span>Fuente primaria · FIN / Supabase</span>
               </header>
               <div className={styles.tableWrap}>
@@ -157,46 +265,85 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
                     </div>
                   );
                 })}
-                {!payments.length ? <div className={styles.empty}>FIN todavía no tiene movimientos en su memoria.</div> : null}
+                {!payments.length ? <div className={styles.empty}>Esta mesa todavía no tiene movimientos financieros.</div> : null}
               </div>
             </section>
 
             <section className={styles.card}>
-              <header className={styles.sectionHead}><div><small>GENERADOR</small><h2>Nuevo cobro</h2></div><span>{isTest ? "TEST" : "Bloqueado"}</span></header>
+              <header className={styles.sectionHead}><div><small>GENERADOR · {scopeLabel.toUpperCase()}</small><h2>Nuevo cobro</h2></div><span>{isTest ? "TEST" : "Bloqueado"}</span></header>
               <form className={styles.form} method="post" action="/fin/create-test">
-                <label>Negocio<input name="businessId" defaultValue="link-control-central" required /></label>
+                {selectedBusiness ? (
+                  <>
+                    <input name="businessId" type="hidden" value={selectedBusiness.business_key} />
+                    <label>Negocio<input value={selectedBusiness.display_name} disabled /></label>
+                  </>
+                ) : (
+                  <label>Negocio
+                    <select name="businessId" defaultValue="link-control-central" required>
+                      {businesses.map((business) => <option value={business.business_key} key={business.business_key}>{business.display_name}</option>)}
+                    </select>
+                  </label>
+                )}
                 <label>Concepto<input name="productName" defaultValue="COBRO LINK" required /></label>
                 <div className={styles.formSplit}>
                   <label>Monto CLP<input name="amount" type="number" min="100" step="1" defaultValue="1000" required /></label>
                   <label>Producto<input name="productId" defaultValue="cobro-general" required /></label>
                 </div>
                 <label>Email cliente · opcional<input name="customerEmail" type="email" placeholder="cliente@correo.cl" /></label>
-                <button type="submit" disabled={!isTest}>Generar y registrar cobro</button>
-                <p>{isTest ? "Stripe crea el checkout; FIN registra el gesto y actualiza su memoria en la misma operación." : "El generador TEST está desactivado en producción."}</p>
+                <button type="submit" disabled={!isTest}>Generar cobro para {selectedBusiness?.display_name || "negocio"}</button>
+                <p>El negocio queda grabado en metadata, ledger y memoria FIN. La ruta de cobro se resolverá por la configuración propia de cada mesa.</p>
               </form>
             </section>
 
             <section id="mesa" className={styles.card}>
-              <header className={styles.sectionHead}><div><small>MESA DE TRABAJO FIN</small><h2>Control financiero</h2></div><span>Operación</span></header>
+              <header className={styles.sectionHead}><div><small>MESA DE TRABAJO</small><h2>{scopeLabel}</h2></div><span>Operación</span></header>
               <div className={styles.workList}>
-                <article><i className={styles.ok} /><div><b>Memoria financiera</b><small>Snapshot rápido + registro inmutable</small></div><strong>ACTIVO</strong></article>
-                <article><i className={styles.ok} /><div><b>Respaldo Drive</b><small>Carpetas + registro maestro + cola de backup</small></div><strong>ARMADO</strong></article>
-                <article><i className={styles.warn} /><div><b>Confirmación automática</b><small>Webhook firmado actualiza estado y deja nuevo evento</small></div><strong>SIGUIENTE</strong></article>
-                <article><i className={styles.warn} /><div><b>Conciliación</b><small>Orden ↔ cobro ↔ documento ↔ liquidación</small></div><strong>SIGUIENTE</strong></article>
+                <article><i className={styles.ok} /><div><b>Memoria separada</b><small>Cobros y estados filtrados por negocio</small></div><strong>ACTIVO</strong></article>
+                <article><i className={styles.ok} /><div><b>Rutas propias</b><small>Cada negocio puede tener pasarelas y cuentas distintas</small></div><strong>ACTIVO</strong></article>
+                <article><i className={styles.ok} /><div><b>Registro inmutable</b><small>Cada gesto conserva business_ref y trazabilidad</small></div><strong>ACTIVO</strong></article>
+                <article><i className={styles.warn} /><div><b>Conciliación por cuenta</b><small>Orden ↔ cobro ↔ liquidación ↔ documento</small></div><strong>SIGUIENTE</strong></article>
               </div>
             </section>
 
-            <section id="inteligencia" className={styles.card}>
-              <header className={styles.sectionHead}><div><small>CEREBRO FINANCIERO</small><h2>Lectura inteligente</h2></div><span>memoria local</span></header>
+            <section className={styles.card}>
+              <header className={styles.sectionHead}><div><small>CEREBRO FINANCIERO</small><h2>Lectura de {scopeLabel}</h2></div><span>memoria local</span></header>
               <div className={styles.brain}>
-                <div><small>SEÑAL</small><b>{open.length ? `${open.length} cobro${open.length === 1 ? "" : "s"} abierto${open.length === 1 ? "" : "s"}` : "Sin cobros abiertos"}</b><p>FIN ya puede responder esta pregunta desde su base sin depender de una consulta en vivo al proveedor.</p></div>
-                <div><small>TRAZABILIDAD</small><b>Nada se corrige borrando</b><p>El ledger es append-only: una corrección genera otro evento y conserva la historia anterior.</p></div>
-                <div><small>DOCUMENTOS</small><b>{memory.documentCount} archivos indexados</b><p>Comprobantes, conciliaciones y cierres tendrán referencia de Drive y estado de respaldo.</p></div>
+                <div><small>SEÑAL</small><b>{open.length ? `${open.length} cobro${open.length === 1 ? "" : "s"} abierto${open.length === 1 ? "" : "s"}` : "Sin cobros abiertos"}</b><p>La respuesta corresponde únicamente al alcance seleccionado.</p></div>
+                <div><small>PASARELAS</small><b>{activeRoutes.filter((route) => route.enabled).length} rutas activas</b><p>FIN no mezcla la configuración de un negocio con otro.</p></div>
+                <div><small>TRAZABILIDAD</small><b>{recentEvents.length} gestos recientes</b><p>Los eventos conservan negocio, orden, proveedor y estado.</p></div>
               </div>
+            </section>
+
+            <section id="pasarelas" className={styles.cardWide}>
+              <header className={styles.sectionHead}><div><small>RUTAS DE COBRO · {scopeLabel.toUpperCase()}</small><h2>Pasarelas y formas de cobro</h2></div><span>LINKSUBDOT DE COBRO</span></header>
+              {selectedBusiness ? (
+                <div className={styles.gateways}>
+                  {activeRoutes.map((route) => (
+                    <article className={route.enabled ? styles.gatewayActive : ""} key={route.id}>
+                      <span>{routeInitial(route.provider)}</span>
+                      <div><b>{route.label}</b><small>{route.method_type} · {route.currency} · conciliación {route.reconciliation_mode}</small></div>
+                      <strong>{route.enabled ? (route.provider === "stripe" && !stripeConfigured() ? "SIN CLAVE" : "ACTIVO") : "INACTIVO"}</strong>
+                    </article>
+                  ))}
+                  {!activeRoutes.length ? <div className={styles.routeEmpty}><b>Sin rutas configuradas</b><span>Esta mesa está aislada y todavía no tiene pasarela o método de cobro asignado.</span></div> : null}
+                </div>
+              ) : (
+                <div className={styles.routeMatrix}>
+                  {businesses.map((business) => {
+                    const routes = paymentRoutes.filter((route) => route.business_key === business.business_key);
+                    return (
+                      <a href={`/fin?business=${encodeURIComponent(business.business_key)}#pasarelas`} key={business.business_key}>
+                        <div><b>{business.display_name}</b><small>{routes.length ? `${routes.length} ruta${routes.length === 1 ? "" : "s"} configurada${routes.length === 1 ? "" : "s"}` : "Sin rutas configuradas"}</small></div>
+                        <span>{routes.filter((route) => route.enabled).map((route) => route.provider).join(" · ") || "Configurar →"}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             <section id="registro" className={styles.cardWide}>
-              <header className={styles.sectionHead}><div><small>REGISTRO FINANCIERO</small><h2>Últimos gestos</h2></div><span>{memory.ledgerCount} eventos totales</span></header>
+              <header className={styles.sectionHead}><div><small>REGISTRO FINANCIERO · {scopeLabel.toUpperCase()}</small><h2>Últimos gestos</h2></div><span>{selectedBusiness ? recentEvents.length : memory.ledgerCount} eventos</span></header>
               <div className={styles.auditGrid}>
                 <div className={styles.auditList}>
                   {recentEvents.map((event) => (
@@ -206,28 +353,19 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
                       <span>{dateTime(event.recorded_at)}</span>
                     </article>
                   ))}
-                  {!recentEvents.length ? <div className={styles.empty}>Sin eventos registrados.</div> : null}
+                  {!recentEvents.length ? <div className={styles.empty}>Sin gestos registrados en esta mesa.</div> : null}
                 </div>
                 <div className={styles.driveBox}>
                   <span className={styles.driveMark}>D</span>
                   <small>RESPALDO EXTERNO</small>
                   <h3>Google Drive</h3>
-                  <p>Archivos de pago, conciliaciones, cierres y evidencia quedan separados de la memoria operativa.</p>
+                  <p>La evidencia permanece respaldada, pero FIN conserva el negocio de origen para no mezclar operaciones.</p>
                   <div><b>{memory.pendingBackups}</b><span>pendientes</span><b>{memory.failedBackups}</b><span>con error</span></div>
                   <nav>
                     {driveRootUrl ? <a href={driveRootUrl} target="_blank" rel="noreferrer">Abrir respaldo ↗</a> : null}
                     {driveSheetUrl ? <a href={driveSheetUrl} target="_blank" rel="noreferrer">Registro maestro ↗</a> : null}
                   </nav>
                 </div>
-              </div>
-            </section>
-
-            <section id="pasarelas" className={styles.cardWide}>
-              <header className={styles.sectionHead}><div><small>PAYMENT ORCHESTRATOR</small><h2>Pasarelas y rutas</h2></div><span>LINKSUBDOT DE COBRO</span></header>
-              <div className={styles.gateways}>
-                <article className={styles.gatewayActive}><span>S</span><div><b>Stripe</b><small>Checkout Sessions · {stripeConfigured() ? "conectado" : "sin credencial"}</small></div><strong>ACTIVO</strong></article>
-                <article><span>T</span><div><b>Transbank</b><small>Adaptador por conectar</small></div><strong>PRÓXIMO</strong></article>
-                <article><span>MP</span><div><b>Mercado Pago</b><small>Adaptador por conectar</small></div><strong>PRÓXIMO</strong></article>
               </div>
             </section>
           </div>
