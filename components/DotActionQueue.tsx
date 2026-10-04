@@ -84,6 +84,17 @@ export default function DotActionQueue({
           : null;
         const needsDecision = work.status === "awaiting_approval" && command;
         const isBlocked = work.status === "blocked";
+        const actionName =
+          command?.action_key === "evidence.request" ? "Pedir evidencia" :
+          command?.action_key === "stage.diagnosis.record" ? "Registrar diagnóstico" :
+          command?.action_key === "stage.escalate" ? "Escalar bloqueo" :
+          command?.action_key === "stage.verify" ? "Verificar etapa" :
+          command?.action_key || "";
+        const commandDetail =
+          typeof command?.payload?.description === "string" ? command.payload.description :
+          typeof command?.payload?.reason === "string" ? command.payload.reason :
+          typeof command?.payload?.problem_statement === "string" ? command.payload.problem_statement :
+          "";
         return (
           <article key={work.id} style={{
             border:"1px solid " + (isBlocked ? "#ead3ce" : needsDecision ? "#e9dcc1" : "#e7e6e1"),
@@ -100,8 +111,14 @@ export default function DotActionQueue({
                 <span style={{fontSize:8,fontWeight:750,letterSpacing:".11em",color:"#909199"}}>{String(work.stage_key || "LINK").toUpperCase()}</span>
                 <span style={{fontSize:8,padding:"3px 7px",borderRadius:999,border:"1px solid #e1e0da",background:"#fafaf8"}}>{label(String(work.status))}</span>
               </div>
-              <b style={{display:"block",fontSize:11}}>{work.reason || "Trabajo de LINK"}</b>
-              {isBlocked && work.last_error ? (
+              <b style={{display:"block",fontSize:11}}>
+                {needsDecision && actionName ? actionName : work.reason || "Trabajo de LINK"}
+              </b>
+              {needsDecision && commandDetail ? (
+                <small style={{display:"block",fontSize:8,lineHeight:1.5,color:"#7f7565",marginTop:5,maxWidth:720}}>
+                  {commandDetail}
+                </small>
+              ) : isBlocked && work.last_error ? (
                 <small style={{display:"block",fontSize:8,lineHeight:1.45,color:"#9a665f",marginTop:5}}>{work.last_error}</small>
               ) : (
                 <small style={{display:"block",fontSize:8,color:"#999aa2",marginTop:5}}>
