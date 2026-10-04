@@ -11,23 +11,57 @@ export type StripeCheckoutInput = {
   cancelUrl: string;
 };
 
-type StripeCheckoutSession = {
+export type StripeCheckoutSession = {
   id: string;
   url: string | null;
   status: string | null;
   payment_status: string | null;
   amount_total: number | null;
   currency: string | null;
+  created?: number | null;
+  expires_at?: number | null;
+  client_reference_id?: string | null;
+  customer_email?: string | null;
+  customer_details?: {
+    email?: string | null;
+    name?: string | null;
+  } | null;
+  metadata?: Record<string, string>;
+  livemode?: boolean;
 };
+
+function stripeSecretKey() {
+  const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!secretKey) throw new Error("stripe_not_configured");
+  return secretKey;
+}
 
 export function stripeConfigured() {
   return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
 }
 
-export async function createStripeCheckoutSession(input: StripeCheckoutInput) {
-  const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
-  if (!secretKey) throw new Error("stripe_not_configured");
+async function stripeRequest<T>(path: string, init?: RequestInit) {
+  const response = await fetch(`https://api.stripe.com${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${stripeSecretKey()}`,
+      ...(init?.headers || {}),
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
 
+  const payload = (await response.json()) as T & {
+    error?: { message?: string; code?: string; type?: string };
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error?.message || `stripe_http_${response.status}`);
+  }
+  return payload;
+}
+
+export async function createStripeCheckoutSession(input: StripeCheckoutInput) {
   const body = new URLSearchParams();
   body.set("mode", "payment");
   body.set("success_url", input.successUrl);
@@ -46,25 +80,15 @@ export async function createStripeCheckoutSession(input: StripeCheckoutInput) {
   if (input.customerEmail) body.set("customer_email", input.customerEmail);
 
   const idempotencyKey = `link:${input.businessId}:${input.orderId}`.slice(0, 255);
-  const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+  const payload = await stripeRequest<StripeCheckoutSession>("/v1/checkout/sessions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${secretKey}`,
       "Content-Type": "application/x-www-form-urlencoded",
       "Idempotency-Key": idempotencyKey,
     },
     body,
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
   });
 
-  const payload = (await response.json()) as StripeCheckoutSession & {
-    error?: { message?: string; code?: string; type?: string };
-  };
-
-  if (!response.ok) {
-    throw new Error(payload.error?.message || `stripe_http_${response.status}`);
-  }
   if (!payload.id || !payload.url) {
     throw new Error("stripe_checkout_missing_url");
   }
@@ -78,4 +102,19 @@ export async function createStripeCheckoutSession(input: StripeCheckoutInput) {
     amountTotal: payload.amount_total,
     currency: payload.currency,
   };
+}
+
+export async function listStripeCheckoutSessions(limit = 40) {
+  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const payload = await stripeRequest<{ data: StripeCheckoutSession[]; has_more?: boolean }>(
+    `/v1/checkout/sessions?limit=${safeLimit}`,
+  );
+  return payload.data || [];
+}
+
+export async function retrieveStripeCheckoutSession(sessionId: string) {
+  if (!/^cs_(test|live)_/.test(sessionId)) throw new Error("invalid_checkout_session");
+  return stripeRequest<StripeCheckoutSession>(
+    `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
+  );
 }
