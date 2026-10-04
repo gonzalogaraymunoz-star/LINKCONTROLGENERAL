@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import LinkPulseButton from "@/components/LinkPulseButton";
 import LiveLinkFeed from "@/components/LiveLinkFeed";
 import CompactApprovals from "@/components/CompactApprovals";
+import BusinessFlowHealth from "@/components/BusinessFlowHealth";
 
 export type AgentCapability = {
   capability_key: string;
@@ -648,6 +649,10 @@ function BusinessesView({ summary, loading }: { summary: any; loading: boolean }
   return (
     <section className="cc-stack">
       <Intro eyebrow="NEGOCIOS" title="Las células que LINK acompaña" text="Aquí ves los negocios. El trabajo de sus actores sigue viviendo en los LINKDOT y sus espacios." />
+      <section className="cc-card cc-flow-health-card">
+        <Head eyebrow="FLUJO" title="Dónde se está frenando cada negocio" note="Una lectura corta: estado, cuello y siguiente paso." />
+        <BusinessFlowHealth />
+      </section>
       <div className="cc-business-grid">
         {worldBusinesses.map((business: any) => (
           <article key={business.global_id}><span className="cc-business-avatar">{String(business.label || "?").slice(0, 2).toUpperCase()}</span><div><small>NEGOCIO</small><h2>{business.label}</h2><p>{business.owner_domain || business.slug || "LINK"}</p></div><Status value={business.verification_status || business.status} /></article>

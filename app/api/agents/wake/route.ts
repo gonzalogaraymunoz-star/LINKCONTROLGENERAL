@@ -121,11 +121,14 @@ export async function GET(request: NextRequest) {
   } catch (wakeError: any) {
     const errorMessage = wakeError?.message || "agent_wake_failed";
     const attemptCount = Number(work.attempt_count || 1);
-    const maxAttempts = Number(work.max_attempts || 2);
+    const configuredMaxAttempts = Number(work.max_attempts || 2);
+    const transientGatewayFailure = /gateway|aborted|temporarily unavailable|timeout|timed out|service unavailable/i.test(errorMessage);
+    const maxAttempts = transientGatewayFailure ? Math.max(configuredMaxAttempts, 4) : configuredMaxAttempts;
     const shouldRetry = attemptCount < maxAttempts;
     const now = new Date().toISOString();
+    const retryDelayMinutes = transientGatewayFailure ? Math.min(5 * attemptCount, 20) : 15;
     const nextAttempt = shouldRetry
-      ? new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      ? new Date(Date.now() + retryDelayMinutes * 60 * 1000).toISOString()
       : null;
 
     console.error("LINK agent work failed", {
@@ -140,6 +143,7 @@ export async function GET(request: NextRequest) {
       .from("agent_work_queue")
       .update({
         status: shouldRetry ? "retry_wait" : "blocked",
+        max_attempts: maxAttempts,
         last_error: errorMessage,
         next_attempt_at: nextAttempt,
         updated_at: now,
@@ -171,6 +175,8 @@ export async function GET(request: NextRequest) {
           attempt_count: attemptCount,
           max_attempts: maxAttempts,
           retry_scheduled: shouldRetry,
+          transient_gateway_failure: transientGatewayFailure,
+          retry_delay_minutes: shouldRetry ? retryDelayMinutes : null,
           error: errorMessage,
         },
         occurred_at: now,

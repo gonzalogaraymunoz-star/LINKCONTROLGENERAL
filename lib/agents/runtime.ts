@@ -276,7 +276,82 @@ export async function wakeAgent(input: WakeInput) {
     return { ok: true, skipped: true, reason: "no_governed_actions_available", agentSlug: input.agentSlug };
   }
 
-  const mission = missionResult.data as any;
+  let mission = missionResult.data as any;
+
+  const shouldBootstrapMission =
+    !mission &&
+    input.workType === "event" &&
+    Boolean(businessGlobalId) &&
+    Boolean(stageKey) &&
+    Boolean(businessResult.data) &&
+    Boolean(stageProcessResult.data) &&
+    !["agent-runtime", "control-central", "agent-focus"].includes(String(sourceEvent.source_provider || ""));
+
+  if (shouldBootstrapMission) {
+    const cleanEvent = String(sourceEvent.event_type || "signal").replaceAll(".", " ");
+    const businessName = String((businessResult.data as any)?.name || businessGlobalId || "Negocio");
+    const stageName = String((stageProcessResult.data as any)?.name || stageKey || "etapa");
+    const missionCode = "MSN-EVT-" + String(sourceEvent.id).replaceAll("-", "").slice(0, 12).toUpperCase();
+
+    const { data: createdMission, error: createMissionError } = await supabase
+      .from("agent_missions")
+      .insert({
+        mission_code: missionCode,
+        control_id: ROOT_CONTROL_ID,
+        business_global_id: businessGlobalId,
+        stage_key: stageKey,
+        title: businessName + " · " + stageName + " · seguir señal " + cleanEvent,
+        problem_statement:
+          "LINK recibió una señal real " +
+          String(sourceEvent.source_provider || "fuente") +
+          "/" +
+          String(sourceEvent.event_type || "evento") +
+          ". Esta misión existe para darle continuidad verificable dentro de la etapa sin inventar datos ni crear trabajo duplicado.",
+        diagnosis: null,
+        expected_outcome:
+          "Registrar el siguiente paso verificable de esta señal y preparar el handoff cuando exista evidencia suficiente.",
+        created_by_agent: input.agentSlug,
+        assigned_agent_slug: input.agentSlug,
+        status: "active",
+        priority: "normal",
+        metadata: {
+          auto_bootstrapped: true,
+          source_event_id: sourceEvent.id,
+          source_provider: sourceEvent.source_provider,
+          source_event_type: sourceEvent.event_type,
+          bootstrap_reason: "real_external_signal_without_active_mission",
+        },
+      })
+      .select("id,mission_code,business_global_id,stage_key,title,problem_statement,diagnosis,expected_outcome,status,priority,assigned_agent_slug,metadata,updated_at")
+      .maybeSingle();
+
+    if (createMissionError && !String(createMissionError.message || "").toLowerCase().includes("duplicate")) {
+      throw createMissionError;
+    }
+
+    if (createdMission) {
+      mission = createdMission;
+      if (input.workItemId) {
+        await supabase
+          .from("agent_work_queue")
+          .update({ mission_id: createdMission.id, updated_at: new Date().toISOString() })
+          .eq("id", input.workItemId);
+      }
+      await supabase
+        .from("agent_scope_state")
+        .update({
+          current_mission_id: createdMission.id,
+          current_mission_code: createdMission.mission_code,
+          current_focus: createdMission.title,
+          state: "working",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("agent_slug", input.agentSlug)
+        .eq("business_global_id", businessGlobalId)
+        .eq("stage_key", stageKey);
+    }
+  }
+
   const parameterIds = (parametersResult.data || []).map((parameter: any) => parameter.id);
   const [observationsResult, evidenceResult] = await Promise.all([
     parameterIds.length
