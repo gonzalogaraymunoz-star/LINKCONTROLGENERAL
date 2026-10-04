@@ -97,13 +97,18 @@ export async function readFinMemory(limit = 50) {
     return {
       payments: [],
       recentEvents: [],
+      ledgerCount: 0,
+      documentCount: 0,
       pendingBackups: 0,
       failedBackups: 0,
+      driveRootId: "",
+      driveMasterSheetId: "",
       configured: false,
+      error: "supabase_not_configured",
     };
   }
 
-  const [paymentsResult, eventsResult, backupResult] = await Promise.all([
+  const [paymentsResult, eventsResult, eventCountResult, documentCountResult, backupResult, configResult] = await Promise.all([
     supabase
       .from("fin_payment_snapshot")
       .select("*")
@@ -115,17 +120,39 @@ export async function readFinMemory(limit = 50) {
       .order("recorded_at", { ascending: false })
       .limit(12),
     supabase
+      .from("fin_ledger_events")
+      .select("id", { count: "exact", head: true }),
+    supabase
+      .from("fin_documents")
+      .select("id", { count: "exact", head: true }),
+    supabase
       .from("fin_drive_backup_queue")
       .select("status"),
+    supabase
+      .from("fin_config")
+      .select("key,value")
+      .in("key", ["drive_root_folder_id", "drive_master_sheet_id"]),
   ]);
 
   const statuses = backupResult.data || [];
+  const config = Object.fromEntries((configResult.data || []).map((item) => [item.key, item.value]));
   return {
     payments: paymentsResult.data || [],
     recentEvents: eventsResult.data || [],
+    ledgerCount: eventCountResult.count || 0,
+    documentCount: documentCountResult.count || 0,
     pendingBackups: statuses.filter((item) => item.status === "pending" || item.status === "processing").length,
     failedBackups: statuses.filter((item) => item.status === "failed").length,
+    driveRootId: config.drive_root_folder_id || "",
+    driveMasterSheetId: config.drive_master_sheet_id || "",
     configured: true,
-    error: paymentsResult.error?.message || eventsResult.error?.message || backupResult.error?.message || "",
+    error:
+      paymentsResult.error?.message ||
+      eventsResult.error?.message ||
+      eventCountResult.error?.message ||
+      documentCountResult.error?.message ||
+      backupResult.error?.message ||
+      configResult.error?.message ||
+      "",
   };
 }
