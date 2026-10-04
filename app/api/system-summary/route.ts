@@ -7,7 +7,7 @@ export async function GET() {
   const capabilities = getGatewayCapabilities();
   if (!supabase) return NextResponse.json({ ok: false, error: "central_supabase_not_configured" }, { status: 503 });
 
-  const [clientsResult, profilesResult, plansResult, strategiesResult, cyclesResult, calendarsResult, gesturesResult, actionsResult, viewsResult, integrationsResult, memoriesResult, commandsResult, eventsResult, worldNodesResult, worldEdgesResult, worldSummaryResult, missionsResult, evidenceResult, allCommandsResult, parametersResult, observationsResult, wakesResult, operatingResult, workQueueResult] = await Promise.all([
+  const [clientsResult, profilesResult, plansResult, strategiesResult, cyclesResult, calendarsResult, gesturesResult, actionsResult, viewsResult, integrationsResult, memoriesResult, commandsResult, eventsResult, worldNodesResult, worldEdgesResult, worldSummaryResult, missionsResult, evidenceResult, allCommandsResult, parametersResult, observationsResult, wakesResult, operatingResult, workQueueResult, dotWorkspacesResult, dotSubdotsResult, dotArtifactsResult, dotSessionsResult, handoffsResult] = await Promise.all([
     supabase.from("clients").select("id,name,slug,status,short_code,symbol,accent,metadata,created_at,updated_at,global_id").eq("status", "active").is("archived_at", null).order("created_at", { ascending: false }),
     supabase.from("client_profiles").select("client_id,brand_dna,communication_rules,business_rules,metadata"),
     supabase.from("client_plan_assignments").select("client_id,plan_name_snapshot,agreed_price,currency,status,starts_at,objectives,metadata").eq("status", "active"),
@@ -43,6 +43,26 @@ export async function GET() {
       .select("id,agent_slug,stage_key,business_global_id,source_event_id,source_provider,event_type,work_type,priority,status,reason,attempt_count,max_attempts,last_error,next_attempt_at,command_id,mission_id,created_at,updated_at,completed_at")
       .order("updated_at", { ascending: false })
       .limit(150),
+    supabase.from("link_dot_workspaces")
+      .select("*")
+      .neq("status", "archived")
+      .order("created_at", { ascending: true }),
+    supabase.from("link_dot_workspace_subdots")
+      .select("*")
+      .neq("status", "archived")
+      .order("sort_order", { ascending: true }),
+    supabase.from("link_dot_artifacts")
+      .select("*")
+      .neq("status", "archived")
+      .order("created_at", { ascending: true }),
+    supabase.from("agent_sessions")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .limit(100),
+    supabase.from("agent_stage_handoffs")
+      .select("*")
+      .order("proposed_at", { ascending: false })
+      .limit(100),
   ]);
 
   const clientRows = clientsResult.data ?? [], profiles = profilesResult.data ?? [], plans = plansResult.data ?? [], strategies = strategiesResult.data ?? [], cycles = cyclesResult.data ?? [], calendars = calendarsResult.data ?? [], gestures = gesturesResult.data ?? [], integrationConnections = integrationsResult.data ?? [], pendingCommands = commandsResult.data ?? [], recentEvents = eventsResult.data ?? [];
@@ -57,6 +77,11 @@ export async function GET() {
   const wakeEvents = wakesResult.data ?? [];
   const agentOperatingState = operatingResult.data ?? [];
   const agentWorkQueue = workQueueResult.data ?? [];
+  const dotWorkspaces = dotWorkspacesResult.data ?? [];
+  const dotSubdots = dotSubdotsResult.data ?? [];
+  const dotArtifacts = dotArtifactsResult.data ?? [];
+  const dotSessions = dotSessionsResult.data ?? [];
+  const agentHandoffs = handoffsResult.data ?? [];
   const byId = Object.fromEntries(capabilities.map((item) => [item.id, item]));
   const centralSupabase = byId["supabase.central.health"], github = byId["github.repo.health"];
   const twentyActive = integrationConnections.some((item) => item.provider === "twenty" && item.status === "active");
@@ -235,6 +260,11 @@ export async function GET() {
     agentWakeEvidence,
     agentOperatingState,
     agentWorkQueue,
+    dotWorkspaces,
+    dotSubdots,
+    dotArtifacts,
+    dotSessions,
+    agentHandoffs,
     services,
     integrations: integrationConnections,
     recentEvents,
