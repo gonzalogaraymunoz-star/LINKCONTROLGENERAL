@@ -130,6 +130,12 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
   const activeRoutes = selectedBusiness
     ? paymentRoutes.filter((route) => route.business_key === selectedBusiness.business_key)
     : paymentRoutes;
+  const routableBusinesses = businesses.filter((business) =>
+    paymentRoutes.some((route) => route.business_key === business.business_key && route.enabled && route.provider === "stripe"),
+  );
+  const selectedCanCharge = selectedBusiness
+    ? activeRoutes.some((route) => route.enabled && route.provider === "stripe")
+    : routableBusinesses.length > 0;
 
   const isTest = process.env.VERCEL_ENV !== "production";
   const created = typeof params.created === "string" ? params.created : "";
@@ -280,7 +286,7 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
                 ) : (
                   <label>Negocio
                     <select name="businessId" defaultValue="link-control-central" required>
-                      {businesses.map((business) => <option value={business.business_key} key={business.business_key}>{business.display_name}</option>)}
+                      {routableBusinesses.map((business) => <option value={business.business_key} key={business.business_key}>{business.display_name}</option>)}
                     </select>
                   </label>
                 )}
@@ -290,8 +296,8 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
                   <label>Producto<input name="productId" defaultValue="cobro-general" required /></label>
                 </div>
                 <label>Email cliente · opcional<input name="customerEmail" type="email" placeholder="cliente@correo.cl" /></label>
-                <button type="submit" disabled={!isTest}>Generar cobro para {selectedBusiness?.display_name || "negocio"}</button>
-                <p>El negocio queda grabado en metadata, ledger y memoria FIN. La ruta de cobro se resolverá por la configuración propia de cada mesa.</p>
+                <button type="submit" disabled={!isTest || !selectedCanCharge}>Generar cobro para {selectedBusiness?.display_name || "negocio"}</button>
+                <p>{selectedCanCharge ? "El negocio queda grabado en metadata, ledger y memoria FIN." : "Esta mesa todavía no tiene una pasarela activa. El cobro queda bloqueado hasta configurar su ruta."}</p>
               </form>
             </section>
 
