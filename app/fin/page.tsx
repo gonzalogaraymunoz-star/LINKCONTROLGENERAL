@@ -1,64 +1,83 @@
-import { listStripeCheckoutSessions, stripeConfigured, type StripeCheckoutSession } from "@/lib/payments/stripe";
+import { stripeConfigured } from "@/lib/payments/stripe";
+import { readFinMemory } from "@/lib/fin/ledger";
 import styles from "./fin.module.css";
 
 export const dynamic = "force-dynamic";
 
 type Search = Record<string, string | string[] | undefined>;
 
-function money(amount: number | null | undefined, currency = "CLP") {
+type FinPayment = {
+  id: string;
+  order_ref: string;
+  business_ref: string | null;
+  product_ref: string | null;
+  provider: string;
+  provider_session_id: string | null;
+  checkout_url: string | null;
+  amount: number | string | null;
+  currency: string | null;
+  status: string;
+  payment_status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type FinEvent = {
+  id: string;
+  event_type: string;
+  business_ref: string | null;
+  order_ref: string | null;
+  provider: string | null;
+  amount: number | string | null;
+  currency: string | null;
+  status: string | null;
+  actor: string;
+  source: string;
+  recorded_at: string;
+};
+
+function money(amount: number | string | null | undefined, currency = "CLP") {
   if (amount == null) return "—";
+  const numeric = typeof amount === "string" ? Number(amount) : amount;
   return new Intl.NumberFormat("es-CL", {
     style: "currency",
     currency: currency.toUpperCase(),
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(Number.isFinite(numeric) ? numeric : 0);
 }
 
-function dateTime(epoch?: number | null) {
-  if (!epoch) return "—";
+function dateTime(value?: string | null) {
+  if (!value) return "—";
   return new Intl.DateTimeFormat("es-CL", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(epoch * 1000));
+  }).format(new Date(value));
 }
 
-function state(session: StripeCheckoutSession) {
-  if (session.payment_status === "paid") return { label: "Pagado", tone: "ok" };
-  if (session.status === "expired") return { label: "Expirado", tone: "off" };
-  if (session.status === "complete") return { label: "Procesando", tone: "warn" };
+function state(payment: FinPayment) {
+  if (payment.payment_status === "paid") return { label: "Pagado", tone: "ok" };
+  if (payment.status === "expired") return { label: "Expirado", tone: "off" };
+  if (payment.status === "complete") return { label: "Procesando", tone: "warn" };
   return { label: "Abierto", tone: "live" };
-}
-
-function business(session: StripeCheckoutSession) {
-  return session.metadata?.business_id || "LINK";
-}
-
-function order(session: StripeCheckoutSession) {
-  return session.metadata?.order_id || session.client_reference_id || "Sin orden";
 }
 
 export default async function FinPage({ searchParams }: { searchParams?: Promise<Search> }) {
   const params = (await searchParams) || {};
-  let sessions: StripeCheckoutSession[] = [];
-  let error = "";
-
-  try {
-    sessions = stripeConfigured() ? await listStripeCheckoutSessions(50) : [];
-  } catch (err) {
-    error = err instanceof Error ? err.message : "No se pudo leer Stripe";
-  }
-
-  const paid = sessions.filter((item) => item.payment_status === "paid");
-  const open = sessions.filter((item) => item.status === "open" && item.payment_status !== "paid");
-  const expired = sessions.filter((item) => item.status === "expired");
+  const memory = await readFinMemory(50);
+  const payments = memory.payments as FinPayment[];
+  const recentEvents = memory.recentEvents as FinEvent[];
+  const paid = payments.filter((item) => item.payment_status === "paid");
+  const open = payments.filter((item) => item.status === "open" && item.payment_status !== "paid");
   const clpPaid = paid
     .filter((item) => (item.currency || "").toLowerCase() === "clp")
-    .reduce((sum, item) => sum + (item.amount_total || 0), 0);
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const isTest = process.env.VERCEL_ENV !== "production";
   const created = typeof params.created === "string" ? params.created : "";
   const paymentResult = typeof params.payment === "string" ? params.payment : "";
+  const driveRootUrl = memory.driveRootId ? `https://drive.google.com/drive/folders/${memory.driveRootId}` : "";
+  const driveSheetUrl = memory.driveMasterSheetId ? `https://docs.google.com/spreadsheets/d/${memory.driveMasterSheetId}/edit` : "";
 
   return (
     <main className={styles.shell}>
@@ -71,15 +90,16 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
         <nav className={styles.nav}>
           <small>FIN · FINANZAS</small>
           <a className={styles.active} href="#resumen"><i>01</i><span><b>Resumen</b><em>Vista ejecutiva</em></span></a>
-          <a href="#cobros"><i>02</i><span><b>Cobros</b><em>Links y transacciones</em></span></a>
+          <a href="#cobros"><i>02</i><span><b>Cobros</b><em>Memoria operativa</em></span></a>
           <a href="#mesa"><i>03</i><span><b>Mesa FIN</b><em>Trabajo operativo</em></span></a>
           <a href="#inteligencia"><i>04</i><span><b>Inteligencia</b><em>Cerebro financiero</em></span></a>
-          <a href="#pasarelas"><i>05</i><span><b>Pasarelas</b><em>Rutas de cobro</em></span></a>
+          <a href="#registro"><i>05</i><span><b>Registro</b><em>Gestos y respaldo</em></span></a>
+          <a href="#pasarelas"><i>06</i><span><b>Pasarelas</b><em>Rutas de cobro</em></span></a>
         </nav>
 
         <div className={styles.sidebarBottom}>
           <span className={styles.liveDot} />
-          <div><b>LINKSUBDOT DE COBRO</b><small>{stripeConfigured() ? "Stripe conectado" : "Stripe sin configurar"}</small></div>
+          <div><b>MEMORIA FIN</b><small>{memory.configured ? "Supabase activo · append-only" : "Sin memoria operativa"}</small></div>
         </div>
       </aside>
 
@@ -93,51 +113,51 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
         </header>
 
         <div className={styles.canvas}>
-          {created ? <div className={styles.notice}>Nuevo checkout creado por LINKSUBDOT. Ya aparece en la bandeja de cobros.</div> : null}
-          {paymentResult === "success" ? <div className={styles.notice}>Stripe devolvió el checkout como completado. El estado de pago se lee directamente desde Stripe.</div> : null}
-          {error ? <div className={styles.error}><b>No pudimos leer Stripe.</b><span>{error}</span></div> : null}
+          {created ? <div className={styles.notice}>Nuevo checkout creado. FIN guardó el gesto, actualizó su memoria y lo dejó en cola de respaldo.</div> : null}
+          {paymentResult === "success" ? <div className={styles.notice}>El cliente volvió desde Stripe. La confirmación definitiva quedará en FIN mediante el evento firmado del proveedor.</div> : null}
+          {memory.error ? <div className={styles.error}><b>Memoria FIN requiere atención.</b><span>{memory.error}</span></div> : null}
 
           <section id="resumen" className={styles.hero}>
             <div>
               <span className={styles.eyebrow}>FIN · MESA FINANCIERA</span>
-              <h1>Todo el dinero de LINK, en una sola mesa.</h1>
-              <p>LINKSUBDOT DE COBRO crea, observa y organiza los cobros. FIN concentra la visión de negocio, la operación y la inteligencia financiera.</p>
+              <h1>Todo el dinero de LINK, con memoria y evidencia.</h1>
+              <p>FIN responde desde su propia memoria operativa. Cada gesto financiero queda registrado como evento inmutable y los documentos se preparan para respaldo en Drive.</p>
             </div>
             <div className={styles.heroState}>
               <span className={styles.liveDot} />
               <b>Cerebro financiero</b>
-              <small>Observando cobros y estados</small>
+              <small>{memory.ledgerCount} gestos registrados</small>
             </div>
           </section>
 
           <section className={styles.metrics}>
-            <article><small>Cobrado · CLP</small><strong>{money(clpPaid, "CLP")}</strong><span>{paid.length} checkout{paid.length === 1 ? "" : "s"} pagado{paid.length === 1 ? "" : "s"}</span></article>
-            <article><small>Links abiertos</small><strong>{open.length}</strong><span>esperando al cliente</span></article>
-            <article><small>Sesiones visibles</small><strong>{sessions.length}</strong><span>últimas 50 en Stripe</span></article>
-            <article><small>Expirados</small><strong>{expired.length}</strong><span>requieren nuevo cobro</span></article>
+            <article><small>Cobrado · CLP</small><strong>{money(clpPaid, "CLP")}</strong><span>{paid.length} cobro{paid.length === 1 ? "" : "s"} confirmado{paid.length === 1 ? "" : "s"}</span></article>
+            <article><small>Cobros abiertos</small><strong>{open.length}</strong><span>memoria FIN, sin consultar Stripe</span></article>
+            <article><small>Gestos registrados</small><strong>{memory.ledgerCount}</strong><span>bitácora append-only</span></article>
+            <article><small>Respaldo Drive</small><strong>{memory.pendingBackups}</strong><span>{memory.failedBackups ? `${memory.failedBackups} con error` : "pendientes de sincronizar"}</span></article>
           </section>
 
           <div className={styles.grid}>
             <section id="cobros" className={styles.cardWide}>
               <header className={styles.sectionHead}>
-                <div><small>CASILLA DE COBROS</small><h2>Links generados</h2></div>
-                <span>Vista rápida · Stripe</span>
+                <div><small>MEMORIA DE COBROS</small><h2>Estado financiero rápido</h2></div>
+                <span>Fuente primaria · FIN / Supabase</span>
               </header>
               <div className={styles.tableWrap}>
-                <div className={styles.tableHead}><span>Estado</span><span>Orden / negocio</span><span>Monto</span><span>Creado</span><span>Acción</span></div>
-                {sessions.map((session) => {
-                  const current = state(session);
+                <div className={styles.tableHead}><span>Estado</span><span>Orden / negocio</span><span>Monto</span><span>Actualizado</span><span>Acción</span></div>
+                {payments.map((payment) => {
+                  const current = state(payment);
                   return (
-                    <div className={styles.tableRow} key={session.id}>
+                    <div className={styles.tableRow} key={payment.id}>
                       <span><i className={styles[current.tone as keyof typeof styles]} />{current.label}</span>
-                      <span><b>{order(session)}</b><small>{business(session)} · {session.metadata?.product_id || "checkout"}</small></span>
-                      <span><b>{money(session.amount_total, session.currency || "CLP")}</b><small>{session.id.slice(0, 18)}…</small></span>
-                      <span>{dateTime(session.created)}</span>
-                      <span>{session.url ? <a href={session.url} target="_blank" rel="noreferrer">{session.payment_status === "paid" ? "Ver checkout ↗" : "Cobrar ↗"}</a> : <em>Sin URL</em>}</span>
+                      <span><b>{payment.order_ref}</b><small>{payment.business_ref || "LINK"} · {payment.product_ref || "sin producto"}</small></span>
+                      <span><b>{money(payment.amount, payment.currency || "CLP")}</b><small>{payment.provider} · {payment.provider_session_id?.slice(0, 18) || "sin ref"}…</small></span>
+                      <span>{dateTime(payment.updated_at)}</span>
+                      <span>{payment.checkout_url ? <a href={payment.checkout_url} target="_blank" rel="noreferrer">{payment.payment_status === "paid" ? "Ver ↗" : "Cobrar ↗"}</a> : <em>Registrado</em>}</span>
                     </div>
                   );
                 })}
-                {!sessions.length ? <div className={styles.empty}>Todavía no hay Checkout Sessions para mostrar.</div> : null}
+                {!payments.length ? <div className={styles.empty}>FIN todavía no tiene movimientos en su memoria.</div> : null}
               </div>
             </section>
 
@@ -151,34 +171,61 @@ export default async function FinPage({ searchParams }: { searchParams?: Promise
                   <label>Producto<input name="productId" defaultValue="cobro-general" required /></label>
                 </div>
                 <label>Email cliente · opcional<input name="customerEmail" type="email" placeholder="cliente@correo.cl" /></label>
-                <button type="submit" disabled={!isTest}>Generar link de cobro</button>
-                <p>{isTest ? "Crea una Checkout Session real dentro del entorno TEST de Stripe." : "El generador TEST está desactivado en producción."}</p>
+                <button type="submit" disabled={!isTest}>Generar y registrar cobro</button>
+                <p>{isTest ? "Stripe crea el checkout; FIN registra el gesto y actualiza su memoria en la misma operación." : "El generador TEST está desactivado en producción."}</p>
               </form>
             </section>
 
             <section id="mesa" className={styles.card}>
-              <header className={styles.sectionHead}><div><small>MESA DE TRABAJO FIN</small><h2>Prioridades</h2></div><span>Operación</span></header>
+              <header className={styles.sectionHead}><div><small>MESA DE TRABAJO FIN</small><h2>Control financiero</h2></div><span>Operación</span></header>
               <div className={styles.workList}>
-                <article><i className={styles.ok} /><div><b>Generación de cobros</b><small>LINKSUBDOT → Stripe Checkout</small></div><strong>ACTIVO</strong></article>
-                <article><i className={styles.warn} /><div><b>Confirmación automática</b><small>Webhook + persistencia normalizada</small></div><strong>SIGUIENTE</strong></article>
-                <article><i className={styles.warn} /><div><b>Conciliación</b><small>Orden ↔ intento ↔ evento ↔ liquidación</small></div><strong>PENDIENTE</strong></article>
-                <article><i className={styles.off} /><div><b>Pagos / salidas</b><small>Separado de COBROS; aún no implementado</small></div><strong>FUERA</strong></article>
+                <article><i className={styles.ok} /><div><b>Memoria financiera</b><small>Snapshot rápido + registro inmutable</small></div><strong>ACTIVO</strong></article>
+                <article><i className={styles.ok} /><div><b>Respaldo Drive</b><small>Carpetas + registro maestro + cola de backup</small></div><strong>ARMADO</strong></article>
+                <article><i className={styles.warn} /><div><b>Confirmación automática</b><small>Webhook firmado actualiza estado y deja nuevo evento</small></div><strong>SIGUIENTE</strong></article>
+                <article><i className={styles.warn} /><div><b>Conciliación</b><small>Orden ↔ cobro ↔ documento ↔ liquidación</small></div><strong>SIGUIENTE</strong></article>
               </div>
             </section>
 
             <section id="inteligencia" className={styles.card}>
-              <header className={styles.sectionHead}><div><small>CEREBRO FINANCIERO</small><h2>Lectura inteligente</h2></div><span>v0 · observador</span></header>
+              <header className={styles.sectionHead}><div><small>CEREBRO FINANCIERO</small><h2>Lectura inteligente</h2></div><span>memoria local</span></header>
               <div className={styles.brain}>
-                <div><small>SEÑAL</small><b>{open.length ? `${open.length} cobro${open.length === 1 ? "" : "s"} abierto${open.length === 1 ? "" : "s"}` : "Sin cobros abiertos"}</b><p>FIN puede priorizar seguimiento cuando un checkout permanece sin pago.</p></div>
-                <div><small>REGLA</small><b>Una orden, una identidad</b><p>business_id + product_id + order_id viajan dentro de cada checkout para mantener trazabilidad.</p></div>
-                <div><small>LÍMITE ACTUAL</small><b>Observa; todavía no decide dinero</b><p>Reembolsos, payouts y cambios sensibles requieren una capa de autorización antes de automatizarse.</p></div>
+                <div><small>SEÑAL</small><b>{open.length ? `${open.length} cobro${open.length === 1 ? "" : "s"} abierto${open.length === 1 ? "" : "s"}` : "Sin cobros abiertos"}</b><p>FIN ya puede responder esta pregunta desde su base sin depender de una consulta en vivo al proveedor.</p></div>
+                <div><small>TRAZABILIDAD</small><b>Nada se corrige borrando</b><p>El ledger es append-only: una corrección genera otro evento y conserva la historia anterior.</p></div>
+                <div><small>DOCUMENTOS</small><b>{memory.documentCount} archivos indexados</b><p>Comprobantes, conciliaciones y cierres tendrán referencia de Drive y estado de respaldo.</p></div>
+              </div>
+            </section>
+
+            <section id="registro" className={styles.cardWide}>
+              <header className={styles.sectionHead}><div><small>REGISTRO FINANCIERO</small><h2>Últimos gestos</h2></div><span>{memory.ledgerCount} eventos totales</span></header>
+              <div className={styles.auditGrid}>
+                <div className={styles.auditList}>
+                  {recentEvents.map((event) => (
+                    <article key={event.id}>
+                      <i className={styles.ok} />
+                      <div><b>{event.event_type}</b><small>{event.order_ref || event.business_ref || "FIN"} · {event.actor} · {event.source}</small></div>
+                      <span>{dateTime(event.recorded_at)}</span>
+                    </article>
+                  ))}
+                  {!recentEvents.length ? <div className={styles.empty}>Sin eventos registrados.</div> : null}
+                </div>
+                <div className={styles.driveBox}>
+                  <span className={styles.driveMark}>D</span>
+                  <small>RESPALDO EXTERNO</small>
+                  <h3>Google Drive</h3>
+                  <p>Archivos de pago, conciliaciones, cierres y evidencia quedan separados de la memoria operativa.</p>
+                  <div><b>{memory.pendingBackups}</b><span>pendientes</span><b>{memory.failedBackups}</b><span>con error</span></div>
+                  <nav>
+                    {driveRootUrl ? <a href={driveRootUrl} target="_blank" rel="noreferrer">Abrir respaldo ↗</a> : null}
+                    {driveSheetUrl ? <a href={driveSheetUrl} target="_blank" rel="noreferrer">Registro maestro ↗</a> : null}
+                  </nav>
+                </div>
               </div>
             </section>
 
             <section id="pasarelas" className={styles.cardWide}>
               <header className={styles.sectionHead}><div><small>PAYMENT ORCHESTRATOR</small><h2>Pasarelas y rutas</h2></div><span>LINKSUBDOT DE COBRO</span></header>
               <div className={styles.gateways}>
-                <article className={styles.gatewayActive}><span>S</span><div><b>Stripe</b><small>Checkout Sessions · conectado</small></div><strong>ACTIVO</strong></article>
+                <article className={styles.gatewayActive}><span>S</span><div><b>Stripe</b><small>Checkout Sessions · {stripeConfigured() ? "conectado" : "sin credencial"}</small></div><strong>ACTIVO</strong></article>
                 <article><span>T</span><div><b>Transbank</b><small>Adaptador por conectar</small></div><strong>PRÓXIMO</strong></article>
                 <article><span>MP</span><div><b>Mercado Pago</b><small>Adaptador por conectar</small></div><strong>PRÓXIMO</strong></article>
               </div>
