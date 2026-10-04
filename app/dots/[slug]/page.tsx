@@ -251,6 +251,9 @@ async function loadDot(slug: string) {
         name: rowMeta.display_label || row.name,
         area: rowMeta.dot_area || rowMeta.stage_label || "Dirección",
         status: row.status,
+        responsibility: rowMeta.responsibility || row.description || "",
+        entryBoundary: rowMeta.entry_boundary || "",
+        exitBoundary: rowMeta.exit_boundary || rowMeta.handoff_boundary || "",
       };
     })
     .sort((a: AnyRow, b: AnyRow) => {
