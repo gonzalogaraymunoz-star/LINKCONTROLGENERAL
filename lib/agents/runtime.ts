@@ -319,6 +319,7 @@ export async function wakeAgent(input: WakeInput) {
   };
 
   let decisionResult: Record<string, unknown> | null = null;
+  const internalReviewOnly = input.workType === "internal_review";
 
   const decisionTool = tool({
     description:
@@ -371,6 +372,32 @@ export async function wakeAgent(input: WakeInput) {
           findings: cleanFindings,
           nextStep: cleanNextStep,
           approvalRequired: false,
+          persistedAs: "AGENT_WAKE_INTERNAL",
+        };
+        return decisionResult;
+      }
+
+      if (internalReviewOnly && decision === "propose") {
+        const summary = String(reason || "La revisión detectó un posible cambio gobernado.").trim();
+        const next = "Dejar esta conclusión documentada y esperar una revisión gobernada antes de cambiar estado, crear trabajo o asignar responsables.";
+        await markWake(supabase, {
+          event: sourceEvent,
+          agentSlug: input.agentSlug,
+          stageKey,
+          status: "internal",
+          reason: "internal_review_proposal_converted_to_note",
+          internalSummary: summary,
+          findings: [],
+          nextStep: next,
+          missionCode: mission?.mission_code || null,
+        });
+        decisionResult = {
+          decision: "internal_work",
+          summary,
+          findings: [],
+          nextStep: next,
+          approvalRequired: false,
+          convertedFromProposal: true,
           persistedAs: "AGENT_WAKE_INTERNAL",
         };
         return decisionResult;
@@ -441,6 +468,9 @@ export async function wakeAgent(input: WakeInput) {
       "For agent.assign include mission_code and assigned_agent_slug.",
       "For stage.escalate or stage.block_scale include mission_code and reason.",
       "For stage.verify include mission_code and note; only propose it when evidence is present and validated.",
+      internalReviewOnly
+        ? "This is a SAFE INTERNAL REVIEW cycle. You MUST choose INTERNAL_WORK or NOOP. Do not propose governed changes in this cycle."
+        : "If a governed state change is truly necessary, PROPOSE it for human approval.",
       "For INTERNAL_WORK provide internalSummary, up to 5 concise findings, and nextStep. Do not repeat the same conclusion already visible in recent events.",
       "Call decide exactly once.",
     ].join("\n"),
