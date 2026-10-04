@@ -47,3 +47,51 @@
 @media(max-width:640px){
   .topbar{height:66px}.topActions>a:first-of-type{display:none}.hero{padding-top:23px}.hero h1{font-size:38px}.heroStats{grid-template-columns:repeat(3,1fr)}.heroStats>div{padding:13px 9px}.heroStats strong{font-size:22px}.heroStats span{font-size:8px}.liveRail{display:block}.liveLabel{height:38px;border-right:0;border-bottom:1px solid var(--m-soft)}.liveRail>button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:10px 12px}.liveRail>button b,.liveRail>button span{white-space:normal}.modes{padding-bottom:2px}.searchWrap{grid-template-columns:32px minmax(0,1fr) 32px}.searchSummary{display:block}.searchSummary>span{display:block;margin:4px 0 8px}.workspace{margin-top:0}.canvasHead{display:block;padding:13px 14px}.canvasHeadActions{margin-top:9px;justify-content:space-between}.canvasHeadActions span{margin-left:auto}.canvas{min-height:500px;height:66vh;background-size:100% 100%,36px 36px,36px 36px}.node{width:124px;min-height:62px;border-radius:14px;padding:8px;grid-template-columns:30px minmax(0,1fr);gap:6px}.nodeIcon{width:29px;height:29px;border-radius:10px}.nodeCopy small{font-size:6px}.nodeCopy b{font-size:9px}.nodeCopy em{font-size:7px}.nodeCenter{width:148px;min-height:72px}.nodeCenter .nodeIcon{width:34px;height:34px}.legend{overflow-x:auto;white-space:nowrap;scrollbar-width:none}.legend small{display:none}.inspectorInner{padding:15px}.factGrid{grid-template-columns:1fr 1fr}
 }
+
+
+/* Micelio attention center */
+.attentionButton{
+  height:34px;border:1px solid var(--m-line);border-radius:999px;background:var(--m-surface);
+  padding:0 10px;display:flex;align-items:center;gap:7px;color:var(--m-text);font-size:10px;
+  cursor:pointer;white-space:nowrap
+}
+.attentionButton>i{width:7px;height:7px;border-radius:50%;background:var(--m-red);box-shadow:0 0 0 4px var(--m-red-soft)}
+.attentionButton>b{min-width:18px;height:18px;border-radius:999px;background:var(--m-red-soft);color:var(--m-red);display:grid;place-items:center;font-size:8px}
+.problemPip{cursor:pointer}
+.attentionLink{
+  width:100%;margin-top:9px;border:1px solid color-mix(in srgb,var(--m-red) 26%,var(--m-line));
+  background:var(--m-red-soft);color:var(--m-red);border-radius:9px;padding:8px 9px;text-align:left;font-size:9px
+}
+.attentionLayer{position:fixed;inset:0;z-index:500;display:flex;justify-content:flex-end}
+.attentionScrim{position:absolute;inset:0;border:0;background:rgba(17,17,15,.32);backdrop-filter:blur(6px)}
+.attentionPanel{
+  position:relative;z-index:2;width:min(520px,94vw);height:100%;background:var(--m-surface);
+  border-left:1px solid var(--m-line);box-shadow:-24px 0 70px rgba(0,0,0,.14);display:grid;
+  grid-template-rows:auto auto auto minmax(0,1fr) auto
+}
+.attentionHead{padding:22px 22px 16px;border-bottom:1px solid var(--m-soft);display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:12px}
+.attentionHead h2{font-size:28px;letter-spacing:-.045em;margin:5px 0 6px}.attentionHead p{font-size:10px;line-height:1.5;color:var(--m-muted);margin:0;max-width:390px}
+.attentionClose{width:34px;height:34px;border:1px solid var(--m-line);border-radius:10px;background:var(--m-surface-2);color:var(--m-muted);font-size:20px}
+.attentionFilter{min-height:44px;padding:8px 14px;background:var(--m-surface-2);border-bottom:1px solid var(--m-soft);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.attentionFilter>span{font-size:9px;color:var(--m-muted)}.attentionFilter button{border:0;background:transparent;color:var(--m-text);font-size:9px;text-decoration:underline;text-underline-offset:3px}
+.attentionTabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 12px;border-bottom:1px solid var(--m-soft)}
+.attentionTabs button{height:36px;border:1px solid var(--m-line);border-radius:9px;background:var(--m-surface);color:var(--m-muted);font-size:9px;display:flex;align-items:center;justify-content:center;gap:6px}
+.attentionTabs button>b{font-size:8px;background:var(--m-surface-2);padding:3px 5px;border-radius:999px}.attentionTabs .attentionTabActive{background:var(--m-text);color:var(--m-surface);border-color:var(--m-text)}.attentionTabs .attentionTabActive>b{background:#ffffff20;color:inherit}
+.attentionBody{overflow:auto;padding:12px}.attentionCards{display:flex;flex-direction:column;gap:9px}
+.attentionCard{border:1px solid var(--m-line);border-radius:14px;padding:14px;background:var(--m-surface);box-shadow:0 8px 24px rgba(0,0,0,.035)}
+.attentionWarn{border-left:3px solid #b67a2b}.attentionCritical{border-left:3px solid var(--m-red)}.attentionDecision{border-left:3px solid #5d6d9b}
+.attentionCard>header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.attentionCard>header small{display:block;font-size:7px;letter-spacing:.11em;color:var(--m-faint);text-transform:uppercase}.attentionCard>header h3{font-size:16px;letter-spacing:-.025em;margin:4px 0 0}.attentionCard>header>span{font-size:8px;color:var(--m-faint);white-space:nowrap}
+.attentionCard>p{font-size:10px;line-height:1.55;color:var(--m-muted);margin:10px 0}
+.failureBox{background:var(--m-red-soft);border-radius:10px;padding:9px 10px;margin:9px 0}.failureBox small{font-size:7px;letter-spacing:.11em;color:var(--m-red)}.failureBox b{display:block;font-size:10px;line-height:1.45;color:color-mix(in srgb,var(--m-red) 82%,var(--m-text));margin-top:3px}
+.attentionFacts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:9px 0}.attentionFacts>div{background:var(--m-surface-2);border-radius:9px;padding:8px;min-width:0}.attentionFacts small{display:block;font-size:7px;letter-spacing:.1em;color:var(--m-faint)}.attentionFacts b{display:block;font-size:9px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.attentionFacts span{display:block;font-size:8px;color:var(--m-muted);margin-top:2px;line-height:1.35}
+.promptBox{border:1px solid var(--m-soft);border-radius:10px;background:var(--m-surface-2);overflow:hidden;margin-top:9px}.promptBox summary{cursor:pointer;padding:9px 10px;font-size:9px;font-weight:650}.promptBox pre{white-space:pre-wrap;font-family:inherit;font-size:9px;line-height:1.55;color:var(--m-muted);margin:0;padding:10px;border-top:1px solid var(--m-soft);background:var(--m-surface)}.promptBox button{margin:0 10px 10px;border:1px solid var(--m-line);border-radius:8px;background:var(--m-surface);padding:7px 9px;color:var(--m-text);font-size:8px}
+.attentionCard>footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}.attentionCard>footer a{flex:1;min-height:34px;border-radius:9px;background:var(--m-text);color:var(--m-surface);display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:9px}.attentionCard>footer button{min-height:34px;border:1px solid var(--m-line);border-radius:9px;background:var(--m-surface);color:var(--m-text);padding:0 10px;font-size:8px}
+.eventList{display:flex;flex-direction:column}.eventList>a{display:grid;grid-template-columns:10px minmax(0,1fr) 18px;gap:9px;align-items:start;padding:11px 4px;border-top:1px solid var(--m-soft);text-decoration:none;color:var(--m-text)}.eventList>a:first-child{border-top:0}.eventList>a>i{width:7px;height:7px;border-radius:50%;margin-top:5px}.eventProblem{background:var(--m-red)}.eventAttention{background:#b67a2b}.eventQuiet{background:var(--m-green)}.eventList>a>div{display:flex;flex-direction:column;min-width:0}.eventList small{font-size:7px;color:var(--m-faint);text-transform:uppercase;letter-spacing:.08em}.eventList b{font-size:10px;margin:3px 0}.eventList span{font-size:9px;line-height:1.42;color:var(--m-muted)}.eventList em{font-style:normal;color:var(--m-faint)}
+.attentionEmpty{min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}.attentionEmpty>span{width:42px;height:42px;border:1px solid var(--m-line);border-radius:50%;display:grid;place-items:center;margin-bottom:10px}.attentionEmpty b{font-size:12px}.attentionEmpty small{font-size:9px;color:var(--m-muted);margin-top:4px;line-height:1.4}
+.attentionFooter{min-height:52px;border-top:1px solid var(--m-soft);padding:0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}.attentionFooter span{font-size:8px;color:var(--m-faint)}.attentionFooter button{height:34px;border:1px solid var(--m-line);border-radius:9px;background:var(--m-surface);color:var(--m-text);padding:0 10px;font-size:9px}
+
+@media(max-width:760px){
+  .attentionButton{padding:0 9px}.attentionButton{font-size:0}.attentionButton>b{font-size:8px}.attentionButton>i{margin-right:0}
+  .attentionPanel{width:100vw}.attentionHead{padding:18px 16px 14px}.attentionHead h2{font-size:24px}
+  .attentionBody{padding:9px}.attentionFacts{grid-template-columns:1fr}.attentionCard{padding:12px}
+}
