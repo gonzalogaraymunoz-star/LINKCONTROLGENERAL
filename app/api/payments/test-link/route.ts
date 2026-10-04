@@ -1,3 +1,4 @@
+// Redeploy marker: refreshed Stripe credential v2.
 // Redeploy marker: Stripe TEST secret refreshed in Vercel.
 import { NextRequest, NextResponse } from "next/server";
 import { createStripeCheckoutSession, stripeConfigured } from "@/lib/payments/stripe";
