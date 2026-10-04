@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import LinkPulseButton from "@/components/LinkPulseButton";
+import LiveLinkFeed from "@/components/LiveLinkFeed";
 
 export type AgentCapability = {
   capability_key: string;
@@ -439,6 +440,8 @@ function HomeView({ actors, allAgents, summary, loading, go }: {
         </div>
         <div className="cc-home-orbit" aria-hidden="true"><span className="cc-orbit-core">L·</span><i /><i /><i /></div>
       </section>
+
+      <LiveLinkFeed />
 
       <div className="cc-home-counters">
         <button onClick={() => go("Actores")}><strong>{actors.length}</strong><span>actores principales</span><small>ver quién hace qué →</small></button>
