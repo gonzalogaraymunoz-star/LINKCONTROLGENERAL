@@ -61,6 +61,9 @@ function human(value?: string | null) {
     processing: "Procesando",
     completed: "Completado",
     success: "Correcto",
+    succeeded: "Correcto",
+    approved: "Aprobado",
+    cancelled: "Cancelado",
     failed: "Falló",
     blocked: "Bloqueado",
     waiting_approval: "Espera aprobación",
@@ -79,7 +82,7 @@ function human(value?: string | null) {
 
 function tone(value?: string | null) {
   const v = String(value || "").toLowerCase();
-  if (/success|active|validated|completed|accepted|connected|live/.test(v)) return styles.ok;
+  if (/success|succeeded|active|validated|completed|accepted|approved|connected|live/.test(v)) return styles.ok;
   if (/failed|blocked|error/.test(v)) return styles.bad;
   if (/pending|waiting|proposed|requested|attention|building/.test(v)) return styles.warn;
   return "";
@@ -152,6 +155,8 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
   const pendingHandoffs = data.handoffs.filter((handoff) =>
     ["proposed", "requested", "pending"].includes(String(handoff.status)),
   );
+  const blockedHandoffs = data.handoffs.filter((handoff) => String(handoff.status) === "blocked");
+  const queuedCommands = data.commands.filter((command) => String(command.status) === "pending");
   const attentionArtifacts = data.artifacts.filter((artifact) =>
     ["attention", "building"].includes(String(artifact.status)),
   );
@@ -167,7 +172,7 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
   ).length;
   const successfulToday = data.commands.filter(
     (command) =>
-      ["completed", "success"].includes(String(command.status)) &&
+      ["completed", "success", "succeeded"].includes(String(command.status)) &&
       isToday(command.processed_at || command.requested_at),
   ).length;
   const resolvedToday = validatedToday + completedToday + successfulToday;
@@ -181,6 +186,7 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
         pendingApprovals.length * 8 -
         failedCommands.length * 10 -
         attentionArtifacts.length * 6 -
+        blockedHandoffs.length * 12 -
         pendingHandoffs.length * 5 -
         Math.min(pendingEvidence.length, 5) * 2,
     ),
@@ -211,11 +217,27 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
         level: "high",
       });
     }
+    if (blockedHandoffs.length) {
+      items.push({
+        title: `${blockedHandoffs.length} handoff${blockedHandoffs.length === 1 ? "" : "s"} bloqueado${blockedHandoffs.length === 1 ? "" : "s"}`,
+        detail: blockedHandoffs[0]?.summary || `${blockedHandoffs[0]?.from_agent_slug || "DOT"} → ${blockedHandoffs[0]?.to_agent_slug || "siguiente DOT"}`,
+        tab: "mision",
+        level: "high",
+      });
+    }
     if (pendingHandoffs.length) {
       items.push({
         title: `${pendingHandoffs.length} handoff${pendingHandoffs.length === 1 ? "" : "s"} por resolver`,
         detail: pendingHandoffs[0]?.summary || `${pendingHandoffs[0]?.from_agent_slug || "DOT"} → ${pendingHandoffs[0]?.to_agent_slug || "siguiente DOT"}`,
         tab: "mision",
+        level: "mid",
+      });
+    }
+    if (queuedCommands.length) {
+      items.push({
+        title: `${queuedCommands.length} acción${queuedCommands.length === 1 ? "" : "es"} en cola`,
+        detail: queuedCommands[0]?.action_key || queuedCommands[0]?.command_type || "Acción pendiente de procesamiento",
+        tab: "mas",
         level: "mid",
       });
     }
@@ -247,7 +269,9 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
   }, [
     blockedMissions,
     pendingApprovals,
+    blockedHandoffs,
     pendingHandoffs,
+    queuedCommands,
     attentionArtifacts,
     data.sessions,
     activeMission,
@@ -257,7 +281,9 @@ export default function DotWorkspacePanel({ data }: { data: DotData }) {
   const currentPending =
     blockedMissions.length +
     pendingApprovals.length +
+    blockedHandoffs.length +
     pendingHandoffs.length +
+    queuedCommands.length +
     attentionArtifacts.length +
     pendingEvidence.length;
 
