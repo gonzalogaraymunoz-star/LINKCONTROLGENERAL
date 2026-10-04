@@ -5,6 +5,10 @@
     {
       "path": "/api/agents/wake",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/link/pulse",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
