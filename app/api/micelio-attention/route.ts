@@ -298,7 +298,10 @@ export async function GET() {
             : mission
               ? `${actor.name} · ${mission.title}`
               : `${actor.name} · trabajo actual`,
-        href: `/dots/${actor.dotSlug}?tab=${tab}`,
+        href:
+          work.status === "awaiting_approval"
+            ? "/#approvals"
+            : `/dots/${actor.dotSlug}?tab=${tab}`,
       },
       prompt,
     };
@@ -328,7 +331,7 @@ export async function GET() {
         summary: commandSummary(command),
         requestedAt: command.requested_at,
         globalId: command.global_id || null,
-        href: `/dots/${actor.dotSlug}?tab=detalles`,
+        href: "/#approvals",
         prompt: rescuePrompt({
           actor,
           state: "awaiting_approval",
