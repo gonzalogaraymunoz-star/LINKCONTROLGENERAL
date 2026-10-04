@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
     const configuredMaxAttempts = Number(work.max_attempts || 2);
     const transientGatewayFailure = /gateway|aborted|temporarily unavailable|timeout|timed out|service unavailable/i.test(errorMessage);
     const maxAttempts = transientGatewayFailure ? Math.max(configuredMaxAttempts, 4) : configuredMaxAttempts;
-    const shouldRetry = attemptCount < maxAttempts;
+    const shouldRetry = transientGatewayFailure && attemptCount < maxAttempts;
     const now = new Date().toISOString();
     const retryDelayMinutes = transientGatewayFailure ? Math.min(5 * attemptCount, 20) : 15;
     const nextAttempt = shouldRetry
@@ -148,6 +148,15 @@ export async function GET(request: NextRequest) {
         last_error: errorMessage,
         next_attempt_at: nextAttempt,
         updated_at: now,
+        metadata: {
+          ...(work.metadata || {}),
+          failure_handling: {
+            classification: transientGatewayFailure ? "transient_gateway" : "non_transient_dependency_or_logic",
+            retry_scheduled: shouldRetry,
+            strategy: shouldRetry ? "bounded_retry" : "stop_and_diagnose",
+            observed_at: now,
+          },
+        },
       })
       .eq("id", work.id);
 
