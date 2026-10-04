@@ -324,10 +324,16 @@ export default function AgenticControlCentral({ initialAgents }: { initialAgents
             </button>
             {moreOpen ? <NavGroup items={MORE} section={section} go={go} collapsed={collapsed} compact /> : null}
             {moreOpen ? (
-              <a className="cc-nav-item" href="/linkguide">
-                <Icon name="grid" />
-                <span className="cc-nav-copy"><b>LINK Guide</b><small>Mapa y direcciones</small></span>
-              </a>
+              <>
+                <a className="cc-nav-item" href="/micelio">
+                  <Icon name="grid" />
+                  <span className="cc-nav-copy"><b>Micelio</b><small>Organismo y relaciones</small></span>
+                </a>
+                <a className="cc-nav-item" href="/linkguide">
+                  <Icon name="grid" />
+                  <span className="cc-nav-copy"><b>LINK Guide</b><small>Mapa y direcciones</small></span>
+                </a>
+              </>
             ) : null}
           </div>
 
