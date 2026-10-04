@@ -106,7 +106,7 @@ async function markWake(
         internal_summary: input.internalSummary || null,
         findings: input.findings || [],
         next_step: input.nextStep || null,
-        mission_code: input.status === "internal" ? (input as any).missionCode || null : null,
+        mission_code: input.status === "internal" ? input.missionCode || null : null,
         model: MODEL,
       },
       occurred_at: new Date().toISOString(),
@@ -202,14 +202,15 @@ export async function wakeAgent(input: WakeInput) {
       .select("source_provider_pattern,event_type_pattern,priority,description")
       .eq("agent_slug", input.agentSlug)
       .eq("enabled", true),
-    businessGlobalId
-      ? supabase
-          .from("event_bus")
-          .select("id,source_provider,event_type,entity_type,global_id,payload,occurred_at,received_at")
-          .eq("global_id", businessGlobalId)
-          .order("received_at", { ascending: false })
-          .limit(20)
-      : Promise.resolve({ data: [], error: null }),
+    (() => {
+      let query = supabase
+        .from("event_bus")
+        .select("id,source_provider,event_type,entity_type,global_id,payload,occurred_at,received_at")
+        .order("received_at", { ascending: false })
+        .limit(24);
+      if (businessGlobalId) return query.eq("global_id", businessGlobalId);
+      return query.eq("source_provider", "agent-runtime");
+    })(),
     stageKey
       ? supabase
           .from("link_stage_processes")
@@ -251,6 +252,7 @@ export async function wakeAgent(input: WakeInput) {
   const routeRows = routesResult.data || [];
   const relevantRecentEvents = (recentEventsResult.data || []).filter((event: any) => {
     if (event.id === sourceEvent.id) return true;
+    if (event.source_provider === "agent-runtime" && event.event_type === "AGENT_WAKE_INTERNAL" && event.payload?.agent_slug === input.agentSlug) return true;
     return routeRows.some((route: any) => {
       try {
         return new RegExp(route.source_provider_pattern).test(String(event.source_provider || "")) &&
