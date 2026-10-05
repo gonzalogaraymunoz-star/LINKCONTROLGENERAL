@@ -436,6 +436,8 @@ function HomeView({ actors, summary, go }: {
 
       <CompactApprovals />
 
+      <AgentActivityPanel actors={actors} summary={summary} go={go} />
+
       <section className="cc-card cc-flow-health-card">
         <Head
           eyebrow="ÓRGANOS · ACCIÓN"
@@ -505,6 +507,152 @@ function HomeView({ actors, summary, go }: {
       </section>
     </section>
   );
+}
+
+function AgentActivityPanel({ actors, summary, go }: {
+  actors: AgentRecord[];
+  summary: any;
+  go: (section: Section) => void;
+}) {
+  const wakes = (summary?.agentWakeEvidence || [])
+    .filter((wake: any) => !wake.recovered)
+    .slice(0, 8);
+
+  return (
+    <section className="cc-card cc-agent-activity-card">
+      <div className="cc-agent-activity-head">
+        <Head
+          eyebrow="ACTIVIDAD AGÉNTICA"
+          title="Qué hicieron los LINKDOT"
+          note="En palabras simples: quién trabajó, qué revisó y en qué quedó."
+        />
+        <button onClick={() => go("Evidencia")}>Ver evidencia completa →</button>
+      </div>
+
+      <div className="cc-agent-activity-list">
+        {wakes.map((wake: any) => {
+          const actor = actorForSlug(wake.agentSlug, actors);
+          const actorName = actor ? shortActorName(actor) : actorLabelForSlug(wake.agentSlug, actors);
+          const activity = genericAgentActivity(wake, actorName);
+          return (
+            <a
+              className="cc-agent-activity-row"
+              href={actor ? "/dots/" + operationalSlug(actor) : "#"}
+              key={wake.id}
+            >
+              <span className={"cc-agent-activity-dot " + activity.tone} />
+              <div className="cc-agent-activity-copy">
+                <div className="cc-agent-activity-meta">
+                  <span>{actorName}</span>
+                  <time>{when(wake.occurredAt)}</time>
+                </div>
+                <b>{activity.title}</b>
+                <p>{activity.description}</p>
+              </div>
+              <span className={"cc-agent-activity-state " + activity.tone}>{activity.status}</span>
+            </a>
+          );
+        })}
+        {!wakes.length ? (
+          <Empty>Todavía no hay actividad agéntica reciente para mostrar.</Empty>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function genericAgentActivity(wake: any, actorName: string) {
+  const eventType = String(wake?.sourceEventType || "").toLowerCase();
+  const actionKey = String(wake?.actionKey || "").toLowerCase();
+  const decision = String(wake?.decision || "").toLowerCase();
+  const failed = wake?.eventType === "AGENT_WAKE_FAILED";
+  const approval = Boolean(wake?.requiresApproval) || wake?.approvalStatus === "pending" || decision === "propose";
+
+  if (failed) {
+    return {
+      title: "Intento de trabajo con error",
+      description: `${actorName} intentó procesar una tarea, pero el sistema no pudo terminarla. El detalle técnico quedó guardado en Evidencia.`,
+      status: "Revisar",
+      tone: "is-danger",
+    };
+  }
+
+  if (approval) {
+    if (actionKey.includes("evidence.request")) {
+      return {
+        title: "Preparó una solicitud de evidencia",
+        description: `${actorName} encontró información que falta para poder avanzar con seguridad y dejó preparada una solicitud para que la apruebes.`,
+        status: "Tu decisión",
+        tone: "is-warn",
+      };
+    }
+    return {
+      title: "Preparó una decisión para aprobar",
+      description: `${actorName} encontró un siguiente paso útil, pero no lo ejecutó porque necesita autorización humana.`,
+      status: "Tu decisión",
+      tone: "is-warn",
+    };
+  }
+
+  if (eventType === "sale.confirmed") {
+    return {
+      title: "Revisión de venta confirmada",
+      description: `${actorName} recibió una venta o reserva confirmada, revisó su respaldo y actualizó el caso sin asumir que existía pago si no había prueba.`,
+      status: "Hecho",
+      tone: "is-ok",
+    };
+  }
+
+  if (eventType === "lead.created") {
+    return {
+      title: "Revisión de nuevo prospecto",
+      description: `${actorName} recibió un nuevo prospecto, revisó la información disponible y dejó claro qué falta antes de pasarlo a la siguiente etapa.`,
+      status: "Hecho",
+      tone: "is-ok",
+    };
+  }
+
+  if (eventType === "mission.review") {
+    if (decision === "noop") {
+      return {
+        title: "Revisión sin cambios",
+        description: `${actorName} revisó una misión y no encontró información nueva que justificara moverla o crear más trabajo.`,
+        status: "Sin cambio",
+        tone: "is-neutral",
+      };
+    }
+    return {
+      title: "Revisión de misión",
+      description: `${actorName} revisó el estado de una misión, ordenó lo que encontró y dejó preparado el siguiente paso verificable.`,
+      status: "Hecho",
+      tone: "is-ok",
+    };
+  }
+
+  if (decision === "noop") {
+    return {
+      title: "Revisión sin cambios",
+      description: `${actorName} comprobó el caso y decidió correctamente no actuar porque no había una señal nueva suficiente.`,
+      status: "Sin cambio",
+      tone: "is-neutral",
+    };
+  }
+
+  if (decision === "internal_work" || decision === "internal") {
+    return {
+      title: "Trabajo interno",
+      description: `${actorName} revisó información del sistema, ordenó el caso y dejó persistido el resultado para el siguiente ciclo.`,
+      status: "Hecho",
+      tone: "is-ok",
+    };
+  }
+
+  return {
+    title: "Revisión del sistema",
+    description: `${actorName} recibió una señal, la revisó y dejó registrado el resultado para mantener continuidad.`,
+    status: "Hecho",
+    tone: "is-ok",
+  };
 }
 
 function ActorJourney({ actors }: { actors: AgentRecord[] }) {
