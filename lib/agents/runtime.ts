@@ -3,8 +3,8 @@ import { z } from "zod";
 import { getCentralSupabase } from "@/lib/supabase/server";
 
 const ROOT_CONTROL_ID = "00000000-0000-0000-0000-000000000001";
-const MODEL = process.env.LINK_AGENT_MODEL || "minimax/minimax-m3-free";
-const FALLBACK_MODELS = (process.env.LINK_AGENT_FALLBACK_MODELS || "inclusionai/ling-3.1-flash-free")
+const MODEL = process.env.LINK_AGENT_MODEL || "inclusionai/ling-3.1-flash-free";
+const FALLBACK_MODELS = (process.env.LINK_AGENT_FALLBACK_MODELS || "minimax/minimax-m3-free")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
