@@ -1250,3 +1250,45 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .cc-od-hero-actions{flex-direction:column}
   .cc-od-status-row,.cc-od-footer-actions{grid-template-columns:1fr}
 }
+
+
+/* CONTROL CENTRAL · ACTIVIDAD AGÉNTICA */
+.cc-agent-activity-card{padding-bottom:10px}
+.cc-agent-activity-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.cc-agent-activity-head .cc-head{flex:1;margin-bottom:10px}
+.cc-agent-activity-head>button{
+  border:0;background:transparent;color:#7180b0;font-size:8px;font-weight:650;
+  padding:8px 0;white-space:nowrap
+}
+.cc-agent-activity-list{display:flex;flex-direction:column}
+.cc-agent-activity-row{
+  display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:11px;align-items:start;
+  padding:12px 2px;border-top:1px solid #eeeeeb;text-decoration:none;color:inherit
+}
+.cc-agent-activity-row:first-child{border-top:0}
+.cc-agent-activity-row:hover .cc-agent-activity-copy>b{color:#6675aa}
+.cc-agent-activity-dot{width:8px;height:8px;border-radius:50%;margin-top:18px;background:#a9abb2}
+.cc-agent-activity-dot.is-ok{background:#86a08b;box-shadow:0 0 0 3px #edf4ee}
+.cc-agent-activity-dot.is-warn{background:#ba965d;box-shadow:0 0 0 3px #f8f1e5}
+.cc-agent-activity-dot.is-danger{background:#a87066;box-shadow:0 0 0 3px #f8ece9}
+.cc-agent-activity-dot.is-neutral{background:#b4b5ba;box-shadow:0 0 0 3px #f2f2f3}
+.cc-agent-activity-copy{min-width:0}
+.cc-agent-activity-meta{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.cc-agent-activity-meta span{font-size:7px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:#8f9199}
+.cc-agent-activity-meta time{font-size:7px;color:#b0b1b7}
+.cc-agent-activity-copy>b{display:block;font-size:10px;font-weight:650;line-height:1.35}
+.cc-agent-activity-copy p{font-size:8px;line-height:1.55;color:#8f9199;margin:4px 0 0;max-width:880px}
+.cc-agent-activity-state{
+  align-self:center;border-radius:999px;background:#f2f2f3;color:#8f9098;
+  padding:5px 8px;font-size:7px;font-weight:650;white-space:nowrap
+}
+.cc-agent-activity-state.is-ok{background:#edf4ed;color:#738d77}
+.cc-agent-activity-state.is-warn{background:#f7f2e8;color:#927b52}
+.cc-agent-activity-state.is-danger{background:#f8ece9;color:#9c665c}
+.cc-agent-activity-state.is-neutral{background:#f1f1f2;color:#8c8d94}
+@media(max-width:700px){
+  .cc-agent-activity-head{display:block}
+  .cc-agent-activity-head>button{padding-top:0;margin-bottom:4px}
+  .cc-agent-activity-row{grid-template-columns:9px minmax(0,1fr)}
+  .cc-agent-activity-state{grid-column:2;justify-self:start;margin-top:2px}
+}
