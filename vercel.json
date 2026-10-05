@@ -4,7 +4,7 @@
   "crons": [
     {
       "path": "/api/agents/wake",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/link/pulse",
