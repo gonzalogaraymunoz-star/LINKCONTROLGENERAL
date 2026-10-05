@@ -21,10 +21,10 @@ export const MICELIO_TECHNOLOGIES: MicelioTechnology[] = [
     owner: "Playground",
     repository: "gonzalogaraymunoz-star/LINK-PREVIEW-STUDIO",
     vercelProject: "playground",
-    status: "partial",
+    status: "connected",
     receives: ["resultado visual aprobado", "version", "referencias", "artefactos de preview"],
     contributes: ["preview", "historial visual", "comparacion responsive", "referencias reutilizables"],
-    nextIntegration: "Conectar el indice visual al Micelio sin duplicar proyectos ni memoria.",
+    nextIntegration: "Consumir su contrato canónico /api/projects + MCP; la verdad visual permanece en Preview Studio.",
   },
   {
     id: "factory",
