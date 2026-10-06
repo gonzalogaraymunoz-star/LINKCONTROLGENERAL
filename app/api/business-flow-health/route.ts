@@ -31,6 +31,30 @@ function stateLabel(state: string) {
   return labels[state] || state;
 }
 
+function isEconomicProof(row: Row) {
+  if (!row || row.verified !== true || Number(row.amount_clp || 0) <= 0) return false;
+  if (row.metadata?.payment_verified === false || row.metadata?.economic_payment_proof === false) return false;
+  const type = String(row.evidence_type || "").toLowerCase();
+  return ["payment","paid","settled","recurrent_delivery","revenue","invoice_paid","receipt_paid"].includes(type)
+    || row.metadata?.economic_payment_proof === true
+    || row.metadata?.proof_scope === "operation_and_revenue_signal";
+}
+
+const GROWTH_ORDER = ["opportunity","activated","recurrent","systematized","delegated","autonomous","expansion"];
+
+function growthLabel(value: string) {
+  const labels: Record<string,string> = {
+    opportunity: "Oportunidad",
+    activated: "Activado",
+    recurrent: "Recurrente",
+    systematized: "Sistematizado",
+    delegated: "Delegado",
+    autonomous: "Autónomo",
+    expansion: "Expansión",
+  };
+  return labels[value] || value;
+}
+
 export async function GET() {
   const supabase = getCentralSupabase();
   if (!supabase) {
@@ -48,6 +72,11 @@ export async function GET() {
     commandsResult,
     handoffsResult,
     eventsResult,
+    modelsResult,
+    modelLinksResult,
+    modelStagesResult,
+    modelEvidenceResult,
+    transactionsResult,
   ] = await Promise.all([
     supabase
       .from("link_world_businesses")
@@ -82,6 +111,26 @@ export async function GET() {
       .not("global_id", "is", null)
       .order("occurred_at", { ascending: false })
       .limit(1000),
+    supabase
+      .from("link_world_models")
+      .select("id,model_key,name,pain_statement,solution_statement,maturity_stage,economic_role,next_gate,model_definition,metadata,status")
+      .eq("status","active"),
+    supabase
+      .from("link_world_model_business_links")
+      .select("model_id,business_id,role,status,metadata")
+      .in("status",["active","proposed"]),
+    supabase
+      .from("link_world_model_stage_state")
+      .select("id,model_id,business_id,stage_key,stage_number,status,objective,next_action,evidence_required,metadata")
+      .order("stage_number"),
+    supabase
+      .from("link_world_model_evidence")
+      .select("id,model_id,business_id,evidence_type,result,amount_clp,verified,metadata,occurred_at,created_at"),
+    supabase
+      .from("link_world_transactions")
+      .select("id,business_id,business_global_id,status,amount,currency,direction,transaction_type,paid_at,occurred_at,metadata")
+      .order("occurred_at",{ascending:false})
+      .limit(500),
   ]);
 
   for (const result of [
@@ -93,6 +142,11 @@ export async function GET() {
     commandsResult,
     handoffsResult,
     eventsResult,
+    modelsResult,
+    modelLinksResult,
+    modelStagesResult,
+    modelEvidenceResult,
+    transactionsResult,
   ]) {
     if (result.error) {
       return NextResponse.json({ ok: false, error: result.error.message }, { status: 500 });
@@ -107,6 +161,11 @@ export async function GET() {
   const commands = commandsResult.data || [];
   const handoffs = handoffsResult.data || [];
   const events = eventsResult.data || [];
+  const models = modelsResult.data || [];
+  const modelLinks = modelLinksResult.data || [];
+  const modelStages = modelStagesResult.data || [];
+  const modelEvidence = modelEvidenceResult.data || [];
+  const transactions = transactionsResult.data || [];
   const internalProviders = new Set(["agent-runtime", "control-central", "link_game", "link-pulse", "control"]);
   const externalEvents = events.filter((row: Row) => !internalProviders.has(String(row.source_provider || "")));
 
@@ -184,6 +243,74 @@ export async function GET() {
       nextAction = "Revisar la política de ingestión de esa fuente.";
     }
 
+    const businessLinks = modelLinks.filter((row: Row) => row.business_id === business.id);
+    const cells = businessLinks.map((link: Row) => {
+      const model = models.find((row: Row) => row.id === link.model_id);
+      if (!model) return null;
+      const stages = modelStages.filter((row: Row) => row.model_id === model.id);
+      const evidence = modelEvidence.filter((row: Row) => row.model_id === model.id && (!row.business_id || row.business_id === business.id));
+      const economicEvidence = evidence.filter(isEconomicProof);
+      const contractSignals = evidence.filter((row: Row) => row.verified === true && Number(row.amount_clp || 0) > 0 && !isEconomicProof(row));
+      const tx = transactions.filter((row: Row) => row.business_id === business.id || row.business_global_id === business.global_id);
+      const paidTx = tx.filter((row: Row) => ["paid","settled","confirmed","completed"].includes(String(row.status || "").toLowerCase()));
+      const stageProof = (key: string) => evidence.filter((row: Row) => row.verified === true && row.metadata?.stage_key === key);
+      const provenStages = stages.filter((stage: Row) => stageProof(stage.stage_key).length > 0);
+      const billing = String(model.model_definition?.billing || "");
+      const recurrent = (economicEvidence.length > 0 || paidTx.length > 0) && ["monthly","per_session","recurring"].includes(billing);
+      const systematized = stages.length >= 6 && provenStages.length >= 4;
+      const delegated = Boolean(model.metadata?.delegated || link.metadata?.delegated);
+      const autonomous = Boolean(model.metadata?.autonomous || link.metadata?.autonomous);
+      const expansion = model.maturity_stage === "replicable" || Boolean(model.metadata?.expansion);
+
+      let growth = "opportunity";
+      if (economicEvidence.length > 0 || paidTx.length > 0) growth = "activated";
+      if (recurrent) growth = "recurrent";
+      if (systematized) growth = "systematized";
+      if (delegated) growth = "delegated";
+      if (autonomous) growth = "autonomous";
+      if (autonomous && expansion) growth = "expansion";
+
+      const firstUnprovenStage = stages.find((stage: Row) => stageProof(stage.stage_key).length === 0);
+      const facilitator = firstUnprovenStage?.metadata?.canonical_label || firstUnprovenStage?.stage_key || null;
+      const cellLabel = link.metadata?.cell_label || model.name;
+
+      return {
+        key: link.metadata?.cell_key || model.model_key,
+        label: cellLabel,
+        role: link.role,
+        modelId: model.id,
+        modelKey: model.model_key,
+        modelName: model.name,
+        pain: model.pain_statement,
+        treatment: model.solution_statement,
+        mission: model.next_gate || firstUnprovenStage?.next_action || "Consolidar evidencia y avanzar el modelo.",
+        maturity: model.maturity_stage,
+        growth,
+        growthLabel: growthLabel(growth),
+        growthIndex: GROWTH_ORDER.indexOf(growth),
+        economicProofCount: economicEvidence.length + paidTx.length,
+        contractSignalCount: contractSignals.length,
+        provenStageCount: provenStages.length,
+        totalStageCount: stages.length,
+        nextStage: firstUnprovenStage ? {
+          key: firstUnprovenStage.stage_key,
+          label: firstUnprovenStage.metadata?.canonical_label || firstUnprovenStage.stage_key,
+          objective: firstUnprovenStage.objective,
+          recommendation: firstUnprovenStage.metadata?.recommendation || firstUnprovenStage.next_action,
+          evidenceRequired: firstUnprovenStage.evidence_required,
+          executors: firstUnprovenStage.metadata?.executor_options || ["chatgpt","human"],
+          prompt: firstUnprovenStage.metadata?.prompt_template || null,
+        } : null,
+        facilitator,
+        stages: stages.map((stage: Row) => ({
+          key: stage.stage_key,
+          label: stage.metadata?.canonical_label || stage.stage_key,
+          proven: stageProof(stage.stage_key).length > 0,
+          evidenceCount: stageProof(stage.stage_key).length,
+        })),
+      };
+    }).filter(Boolean);
+
     return {
       id: business.id,
       globalId: business.global_id,
@@ -202,6 +329,9 @@ export async function GET() {
         pendingApprovals: pendingApprovals.length,
         blockedHandoffs: blockedHandoffs.length,
       },
+      cells,
+      growthMission: cells[0]?.mission || nextAction,
+      growthState: cells[0]?.growth || null,
       currentMission: activeMissions[0]
         ? {
             code: activeMissions[0].mission_code,
