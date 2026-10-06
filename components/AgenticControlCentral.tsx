@@ -78,20 +78,19 @@ type Section =
   | "Sistema";
 
 const PRIMARY: Array<{ id: Section; icon: string; hint: string }> = [
-  { id: "Inicio", icon: "home", hint: "Qué está pasando" },
-  { id: "Actores", icon: "people", hint: "Quién hace qué" },
-  { id: "Trabajo", icon: "check", hint: "Misiones en curso" },
-  { id: "Espacios", icon: "folder", hint: "Dónde trabajan" },
+  { id: "Inicio", icon: "home", hint: "Dirección del crecimiento" },
+  { id: "Negocios", icon: "grid", hint: "Células económicas" },
+  { id: "Trabajo", icon: "check", hint: "Intervenciones necesarias" },
+  { id: "Calendario", icon: "calendar", hint: "Ritmo y compromisos" },
 ];
 
-const CONTEXT: Array<{ id: Section; icon: string; hint: string }> = [
-  { id: "Negocios", icon: "grid", hint: "Células del organismo" },
-  { id: "Conversaciones", icon: "chat", hint: "Contexto persistente" },
-  { id: "Calendario", icon: "calendar", hint: "Fechas reales" },
-];
+const CONTEXT: Array<{ id: Section; icon: string; hint: string }> = [];
 
 const MORE: Array<{ id: Section; icon: string; hint: string }> = [
-  { id: "Evidencia", icon: "pulse", hint: "Qué ocurrió de verdad" },
+  { id: "Actores", icon: "people", hint: "LINKDOT facilitadores" },
+  { id: "Espacios", icon: "folder", hint: "Mesas y artefactos" },
+  { id: "Conversaciones", icon: "chat", hint: "Contexto persistente" },
+  { id: "Evidencia", icon: "pulse", hint: "Pruebas del organismo" },
   { id: "Conexiones", icon: "link", hint: "Sistemas conectados" },
   { id: "Sistema", icon: "settings", hint: "Detalles técnicos" },
 ];
@@ -315,7 +314,7 @@ export default function AgenticControlCentral({ initialAgents }: { initialAgents
 
         <div className="cc-side-scroll">
           <NavGroup label="NAVEGAR" items={PRIMARY} section={section} go={go} collapsed={collapsed} />
-          <NavGroup label="SPACES · CONTEXTO" items={CONTEXT} section={section} go={go} collapsed={collapsed} />
+          {CONTEXT.length ? <NavGroup label="CONTEXTO" items={CONTEXT} section={section} go={go} collapsed={collapsed} /> : null}
 
           <div className="cc-nav-group">
             <button className="cc-more-toggle" onClick={() => setMoreOpen((v) => !v)}>
@@ -339,8 +338,8 @@ export default function AgenticControlCentral({ initialAgents }: { initialAgents
           </div>
 
           <div className="cc-actors-quick">
-            <div className="cc-side-label">DOTS</div>
-            {actors.map((actor) => (
+            <div className="cc-side-label">FACILITADORES</div>
+            {actors.filter((actor) => actor.slug !== "link-director").map((actor) => (
               <a key={actor.id} href={"/dots/" + operationalSlug(actor)} title={collapsed ? shortActorName(actor) : undefined}>
                 <span className="cc-actor-pip" />
                 <span><b>{shortActorName(actor)}</b><small>{actorArea(actor)}</small></span>
@@ -424,86 +423,56 @@ function HomeView({ actors, summary, go }: {
     <section className="cc-stack cc-od-home">
       <section className="cc-od-hero">
         <div className="cc-od-hero-copy">
-          <span className="cc-eyebrow">LINK · ORGANISMO VIVO</span>
-          <h1>¿Qué necesita LINK de mí ahora?</h1>
-          <p>Aquí no vienes a mirar paneles. Vienes a aprobar, desbloquear, comprobar o poner a trabajar al actor correcto.</p>
+          <span className="cc-eyebrow">LINK · CONTROL DESDE ARRIBA</span>
+          <h1>¿Qué célula necesita crecer ahora?</h1>
+          <p>Control Central no administra paneles por administrar. Observa cada célula económica, su misión, su evidencia y el siguiente movimiento. Los LINKDOT participan como facilitadores de las seis etapas.</p>
         </div>
         <div className="cc-od-hero-actions">
-          <a className="cc-od-primary" href="/dots/link-director">Hablar con Director →</a>
-          <button onClick={() => go("Trabajo")}>Ver trabajo en curso</button>
+          <button className="cc-od-primary" onClick={() => go("Negocios")}>Ver células →</button>
+          <button onClick={() => go("Trabajo")}>Ver intervenciones necesarias</button>
         </div>
       </section>
 
-      <CompactApprovals />
-
-      <AgentActivityPanel actors={actors} summary={summary} go={go} />
-
       <section className="cc-card cc-flow-health-card">
         <Head
-          eyebrow="ÓRGANOS · ACCIÓN"
-          title="Qué negocio necesita intervención"
-          note="Cada fila muestra el cuello de botella real y dónde actuar. Si no hay señal real, LINK no fabrica actividad."
+          eyebrow="CÉLULAS · CRECIMIENTO"
+          title="Qué negocio necesita avanzar"
+          note="Misión, estado de crecimiento, prueba económica, etapa pendiente y LINKDOT facilitador. La ingeniería queda debajo."
         />
         <BusinessFlowHealth />
       </section>
 
+      <CompactApprovals />
+
       <div className="cc-od-status-row">
         <button className={blocked.length ? "is-attention" : ""} onClick={() => go("Trabajo")}>
           <strong>{blocked.length}</strong>
-          <span>bloqueos o evidencias pendientes</span>
+          <span>intervenciones que frenan células</span>
           <small>{blocked.length ? "resolver ahora →" : "sin bloqueo material"}</small>
         </button>
-        <button onClick={() => go("Trabajo")}>
-          <strong>{working.length}</strong>
-          <span>misiones moviéndose</span>
-          <small>ver ejecución →</small>
+        <button onClick={() => go("Negocios")}>
+          <strong>{summary?.world?.nodes?.filter((node: any) => node.entity_type === "business").length || 0}</strong>
+          <span>negocios observados</span>
+          <small>ver crecimiento →</small>
         </button>
-        <button onClick={() => go("Espacios")}>
-          <strong>{spaces.length}</strong>
-          <span>Spaces de trabajo</span>
-          <small>abrir espacios →</small>
+        <button onClick={() => go("Calendario")}>
+          <strong>{summary?.tasks?.filter((task: any) => task.dueAt).length || 0}</strong>
+          <span>compromisos con fecha</span>
+          <small>ver ritmo →</small>
         </button>
         <button onClick={() => go("Actores")}>
-          <strong>{actors.length}</strong>
-          <span>Dots principales</span>
-          <small>abrir especialistas →</small>
+          <strong>{actors.filter((actor) => actor.slug !== "link-director").length}</strong>
+          <span>LINKDOT facilitadores</span>
+          <small>ver participantes →</small>
         </button>
       </div>
 
-      <div className="cc-od-two">
-        <section className="cc-card">
-          <Head
-            eyebrow="DOTS"
-            title="Quién puede hacerse cargo"
-            note="Cada Dot tiene responsabilidad, memoria, capacidades y un espacio propio de trabajo."
-          />
-          <ActorJourney actors={actors.filter((actor) => actor.slug !== "link-director")} />
-        </section>
-
-        <section className="cc-card">
-          <Head
-            eyebrow="SPACES"
-            title="Dónde vive el trabajo"
-            note="Negocios, artefactos y especialistas reunidos por contexto; no por tecnología."
-          />
-          <WorkspaceStrip summary={summary} actors={actors} />
-        </section>
-      </div>
-
-      <section className="cc-card cc-od-live-card">
+      <section className="cc-card">
         <Head
-          eyebrow="ORGANISMO EN VIVO"
-          title="Qué está ocurriendo mientras trabajamos"
-          note="Señales, movimientos y resultados reales. Actividad no equivale a progreso."
+          eyebrow="PRINCIPIO"
+          title="La célula es protagonista; el LINKDOT facilita"
+          note="MAR, Ventas, Cierre, Boarding, Opera y Postventa existen para que el negocio avance. Si una actividad no mejora la misión ni produce evidencia, no ocupa la pantalla principal."
         />
-        <LiveLinkFeed />
-      </section>
-
-      <section className="cc-od-footer-actions">
-        <button onClick={() => go("Negocios")}><b>Órganos</b><span>Ver negocios y su estado →</span></button>
-        <button onClick={() => go("Conversaciones")}><b>Threads</b><span>Recuperar contexto persistente →</span></button>
-        <button onClick={() => go("Evidencia")}><b>Evidencia</b><span>Comprobar qué ocurrió de verdad →</span></button>
-        <button onClick={() => go("Sistema")}><b>Organismo</b><span>Diagnóstico de sistemas →</span></button>
       </section>
     </section>
   );
@@ -778,7 +747,7 @@ function WorkView({ actors, allAgents, summary, loading }: { actors: AgentRecord
   const legacyTasks = summary?.tasks || [];
   return (
     <section className="cc-stack">
-      <Intro eyebrow="TRABAJO" title="Qué tiene cada actor entre manos" text="Primero mostramos misiones reales de los LINKDOT. Las tareas de negocios quedan separadas debajo para no confundir dos tipos distintos de trabajo." />
+      <Intro eyebrow="INTERVENCIONES" title="Qué necesita una célula para avanzar" text="Aquí sólo debe aparecer trabajo que destraba o mejora una célula. El LINKDOT es responsable de facilitar la etapa; la misión económica del negocio manda." />
       <div className="cc-work-columns">
         {actors.map((actor) => {
           const actorMissions = active.filter((mission: any) => actorForSlug(mission.assigned_agent_slug || mission.created_by_agent, allAgents)?.id === actor.id);
@@ -799,7 +768,7 @@ function WorkView({ actors, allAgents, summary, loading }: { actors: AgentRecord
         })}
       </div>
       <section className="cc-card">
-        <Head eyebrow="TAREAS DE NEGOCIOS" title="Trabajo con fecha" note="Estas son tareas de operación. No se mezclan con las misiones de los LINKDOT." />
+        <Head eyebrow="COMPROMISOS" title="Trabajo con fecha ligado a la operación" note="Sólo importa si sostiene una entrega, cierre, evidencia o siguiente movimiento de una célula." />
         <div className="cc-table">
           {legacyTasks.map((task: any) => <div key={task.id}><b>{task.title}</b><span>{task.client || "Personal"}</span><Status value={task.status} /><span>{when(task.dueAt)}</span></div>)}
           {!legacyTasks.length && !loading ? <Empty>No hay tareas de negocio abiertas. Esto no significa que los LINKDOT estén sin trabajo.</Empty> : null}
@@ -858,31 +827,24 @@ function WorkspaceStrip({ summary, actors }: { summary: any; actors: AgentRecord
 }
 
 function BusinessesView({ summary, loading }: { summary: any; loading: boolean }) {
-  const worldBusinesses = (summary?.world?.nodes || []).filter((node: any) => node.entity_type === "business");
-  const clients = summary?.clients || [];
   return (
     <section className="cc-stack">
-      <Intro eyebrow="NEGOCIOS" title="Las células que LINK acompaña" text="Aquí ves los negocios. El trabajo de sus actores sigue viviendo en los LINKDOT y sus espacios." />
+      <Intro
+        eyebrow="CÉLULAS ECONÓMICAS"
+        title="Controlar crecimiento negocio por negocio"
+        text="Cada negocio se mira desde arriba: misión, modelo, evidencia económica, Concha y siguiente movimiento. Los LINKDOT entran como participantes y facilitadores cuando una etapa necesita ayuda."
+      />
       <section className="cc-card cc-flow-health-card">
-        <Head eyebrow="FLUJO" title="Dónde se está frenando cada negocio" note="Una lectura corta: estado, cuello y siguiente paso." />
+        <Head
+          eyebrow="PORTAFOLIO VIVO"
+          title="Células, misión y crecimiento"
+          note="No mostramos handoffs como producto final. Mostramos qué debe mejorar cada célula y qué evidencia falta para avanzar."
+        />
         <BusinessFlowHealth />
       </section>
-      <div className="cc-business-grid">
-        {worldBusinesses.map((business: any) => (
-          <article key={business.global_id}><span className="cc-business-avatar">{String(business.label || "?").slice(0, 2).toUpperCase()}</span><div><small>NEGOCIO</small><h2>{business.label}</h2><p>{business.owner_domain || business.slug || "LINK"}</p></div><Status value={business.verification_status || business.status} /></article>
-        ))}
-        {!worldBusinesses.length && !loading ? <Empty>LINK WORLD no reportó negocios al grafo compartido.</Empty> : null}
-      </div>
-      {clients.length ? (
-        <section className="cc-card">
-          <Head eyebrow="OPERACIÓN" title="Clientes con trabajo en Control Central" />
-          <div className="cc-simple-list">
-            {clients.map((client: any) => (
-              <div className="cc-static-row" key={client.id}><span className="cc-business-avatar small">{String(client.name || "?").slice(0, 2).toUpperCase()}</span><div><b>{client.name}</b><small>{client.stage || "Sin etapa"} · {client.gestureCount || 0} tareas</small></div><span>{client.nextGestureAt ? "Próximo " + when(client.nextGestureAt) : "Sin próximo hito"}</span></div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {!loading && !(summary?.world?.nodes || []).some((node: any) => node.entity_type === "business")
+        ? <Empty>No hay negocios visibles en LINK WORLD.</Empty>
+        : null}
     </section>
   );
 }
