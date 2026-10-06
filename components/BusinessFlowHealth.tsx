@@ -2,6 +2,42 @@
 
 import { useEffect, useState } from "react";
 
+type CellStage = {
+  key: string;
+  label: string;
+  proven: boolean;
+  evidenceCount: number;
+};
+
+type Cell = {
+  key: string;
+  label: string;
+  role: string;
+  modelName: string;
+  pain?: string | null;
+  treatment?: string | null;
+  mission: string;
+  maturity: string;
+  growth: string;
+  growthLabel: string;
+  growthIndex: number;
+  economicProofCount: number;
+  contractSignalCount: number;
+  provenStageCount: number;
+  totalStageCount: number;
+  facilitator?: string | null;
+  nextStage?: {
+    key: string;
+    label: string;
+    objective?: string | null;
+    recommendation?: string | null;
+    evidenceRequired?: string | null;
+    executors?: string[];
+    prompt?: string | null;
+  } | null;
+  stages: CellStage[];
+};
+
 type FlowRow = {
   globalId: string;
   slug: string;
@@ -10,6 +46,9 @@ type FlowRow = {
   stateLabel: string;
   bottleneck: string;
   nextAction: string;
+  growthMission?: string | null;
+  growthState?: string | null;
+  cells: Cell[];
   metrics: {
     activeSources: number;
     events48h: number;
@@ -18,12 +57,6 @@ type FlowRow = {
     pendingApprovals: number;
     blockedHandoffs: number;
   };
-  currentMission?: {
-    code: string;
-    title: string;
-    stage: string;
-    status: string;
-  } | null;
 };
 
 function tone(state: string) {
@@ -67,50 +100,91 @@ export default function BusinessFlowHealth() {
   }
 
   return (
-    <section className="cc-business-flow">
+    <section className="cc-business-flow cc-cell-control">
       {rows.map((row) => (
-        <article className={"cc-business-flow-row" + tone(row.state)} key={row.globalId}>
-          <div className="cc-business-flow-state">
-            <span className={"cc-live-dot" + tone(row.state)} />
+        <article className={"cc-cell-business" + tone(row.state)} key={row.globalId}>
+          <header className="cc-cell-business-head">
             <div>
-              <b>{row.name}</b>
-              <small>{row.stateLabel}</small>
+              <span className={"cc-live-dot" + tone(row.state)} />
+              <div>
+                <small>NEGOCIO</small>
+                <h3>{row.name}</h3>
+                <p>{row.cells.length ? `${row.cells.length} célula${row.cells.length === 1 ? "" : "s"} económica${row.cells.length === 1 ? "" : "s"}` : "Sin célula económica modelada todavía."}</p>
+              </div>
             </div>
-          </div>
+            <a href={"https://link-world-game.vercel.app/?business=" + encodeURIComponent(row.slug)}>Abrir en LINK WORLD →</a>
+          </header>
 
-          <div className="cc-business-flow-copy">
-            <p>{row.bottleneck}</p>
-            <small>{row.nextAction}</small>
-          </div>
+          {row.cells.length ? (
+            <div className="cc-cell-list">
+              {row.cells.map((cell) => (
+                <section className="cc-cell-growth" key={cell.key}>
+                  <div className="cc-cell-growth-head">
+                    <div>
+                      <span className="cc-eyebrow">{cell.label}</span>
+                      <h4>{cell.modelName}</h4>
+                    </div>
+                    <span className="cc-growth-state">{cell.growthLabel}</span>
+                  </div>
 
-          <div className="cc-business-flow-metrics">
-            <span><b>{row.metrics.events48h}</b><small>señales 48h</small></span>
-            <span><b>{row.metrics.activeMissions}</b><small>misiones</small></span>
-            <span><b>{row.metrics.executableWork}</b><small>trabajos</small></span>
-          </div>
+                  <div className="cc-cell-mission">
+                    <small>MISIÓN DE CRECIMIENTO</small>
+                    <b>{cell.mission}</b>
+                  </div>
 
-          {row.currentMission ? (
-            <a href={"/dots/" + stageDot(row.currentMission.stage)}>
-              Abrir actor →
-            </a>
+                  <div className="cc-growth-track">
+                    {["Oportunidad","Activado","Recurrente","Sistematizado","Delegado","Autónomo","Expansión"].map((label,index) => (
+                      <span key={label} className={index <= cell.growthIndex ? "done" : ""}><i />{label}</span>
+                    ))}
+                  </div>
+
+                  <div className="cc-cell-proof">
+                    <span><b>{cell.economicProofCount}</b><small>pruebas económicas</small></span>
+                    <span><b>{cell.provenStageCount}/{cell.totalStageCount || 6}</b><small>etapas comprobadas</small></span>
+                    <span><b>{cell.facilitator || "—"}</b><small>LINKDOT facilitador</small></span>
+                  </div>
+
+                  {cell.nextStage ? (
+                    <div className="cc-cell-next">
+                      <div>
+                        <small>SIGUIENTE MOVIMIENTO · {cell.nextStage.label}</small>
+                        <b>{cell.nextStage.recommendation || cell.nextStage.objective || "Conseguir evidencia para avanzar."}</b>
+                        <p>{cell.nextStage.evidenceRequired ? "Se comprueba con: " + cell.nextStage.evidenceRequired : ""}</p>
+                      </div>
+                      <div className="cc-cell-executors">
+                        {(cell.nextStage.executors || []).map((item) => <span key={item}>{item === "chatgpt" ? "ChatGPT" : item === "human" ? "Humano" : "ChatGPT + humano"}</span>)}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="cc-cell-next is-complete"><b>La Concha base está comprobada. La siguiente misión es autonomía o expansión.</b></div>
+                  )}
+
+                  <div className="cc-cell-stage-row">
+                    {cell.stages.map((stage) => (
+                      <span key={stage.key} className={stage.proven ? "done" : ""} title={stage.evidenceCount ? `${stage.evidenceCount} evidencia(s)` : "Sin evidencia"}>
+                        {stage.label}
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
           ) : (
-            <span className="cc-business-flow-ready">Sin acción manual</span>
+            <div className="cc-empty">Esta empresa existe en el ecosistema, pero todavía no tiene una célula/modelo que podamos dirigir económicamente.</div>
           )}
+
+          <details className="cc-technical-summary">
+            <summary>Ver señales técnicas</summary>
+            <div>
+              <span>{row.metrics.events48h} señales 48h</span>
+              <span>{row.metrics.activeMissions} misiones internas</span>
+              <span>{row.metrics.executableWork} trabajos runtime</span>
+              <span>{row.metrics.pendingApprovals} aprobaciones</span>
+              <span>{row.metrics.blockedHandoffs} handoffs bloqueados</span>
+            </div>
+          </details>
         </article>
       ))}
     </section>
   );
-}
-
-function stageDot(stage: string) {
-  const map: Record<string, string> = {
-    marketing: "linkdot-marketing-rrss",
-    ventas: "linkdot-ventas",
-    cierre: "linkdot-cierre",
-    onboarding: "linkdot-onboarding",
-    entrega: "linkdot-entrega",
-    postventa: "linkdot-postventa",
-    transversal: "link-director",
-  };
-  return map[stage] || "link-director";
 }
