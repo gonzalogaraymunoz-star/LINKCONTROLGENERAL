@@ -1,0 +1,29 @@
+.organism-observatory{margin:18px 0 22px;padding:22px;border:1px solid #dddeda;border-radius:22px;background:#fafaf8;color:#292d29;box-shadow:0 12px 36px #1618160a}
+.organism-head,.organism-cell-top{display:flex;align-items:flex-start;justify-content:space-between;gap:15px}
+.organism-head h2{font-size:23px;letter-spacing:-.05em;margin:6px 0}
+.organism-head p,.organism-cell-top p{color:#797d77;font-size:12px;line-height:1.6;margin:4px 0 0;max-width:560px}
+.organism-eyebrow{font-size:9px;font-weight:750;letter-spacing:.12em;color:#68816a}
+.organism-head button,.organism-cell-top a{flex:none;background:#fdfdfb;border:1px solid #d8ded6;color:#455e46;text-decoration:none;border-radius:10px;padding:10px 12px;font-size:11px;font-weight:650}
+.organism-head button:disabled{opacity:.6;cursor:progress}
+.organism-cell{border:1px solid #dce3d9;border-radius:18px;background:#fff;padding:18px;margin-top:15px}
+.organism-cell h3{font-size:23px;letter-spacing:-.05em;margin:6px 0;color:#314c35}
+.organism-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:15px 0}
+.organism-facts>div{min-width:0;border:1px solid #e5e9e2;border-radius:11px;padding:11px;background:#f8faf6}
+.organism-facts small{display:block;font-size:9px;color:#818c7e;margin-bottom:6px}
+.organism-facts strong{font-size:12px;color:#384b39;overflow-wrap:anywhere}
+.organism-facts .organism-id{font-size:10px;font-weight:600}
+.organism-statusline{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.organism-statusline span{font-size:10px;background:#edf3ea;color:#55735a;padding:7px 9px;border-radius:99px}
+.organism-organelles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.organism-organelle{display:grid;gap:6px;min-width:0;background:#f6f7f4;border:1px solid #e2e7df;border-radius:10px;padding:10px}
+.organism-organelle span{font-size:11px;font-weight:650;color:#455446}
+.organism-organelle small{font-size:9px;color:#7b897a}
+.organism-organelle.is-active{background:#edf5e9;border-color:#ccdfc4}
+.organism-organelle.is-ready{background:#f8f5eb;border-color:#e6ddbd}
+.organism-organelle.is-degraded{background:#fff1e9;border-color:#eccab5}
+.organism-footnote{font-size:10px;line-height:1.6;color:#7b8579;margin:13px 0 0}
+.organism-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:10px;color:#869085;margin-top:12px}
+.organism-error{font-size:12px;color:#944534;background:#fff1eb;border:1px solid #edcbbd;border-radius:11px;padding:12px}
+.organism-placeholder{font-size:12px;color:#7b8978;padding:12px 0}
+@media(max-width:800px){.organism-observatory{padding:14px}.organism-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.organism-organelles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.organism-head,.organism-cell-top{flex-direction:column}.organism-facts{grid-template-columns:1fr 1fr}.organism-organelles{grid-template-columns:1fr 1fr}}
