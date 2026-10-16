@@ -12,6 +12,33 @@ function authorizedCron(request: NextRequest) {
 
 export const maxDuration = 120;
 
+async function runLivePulseIfDue(request: NextRequest) {
+  const now = new Date();
+  if (now.getUTCMinutes() % 5 !== 0) return { due: false, ok: true };
+
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return { due: true, ok: false, error: "cron_secret_missing" };
+
+  try {
+    const pulseUrl = new URL("/api/link/pulse", request.url);
+    const response = await fetch(pulseUrl, {
+      method: "GET",
+      headers: { authorization: `Bearer ${secret}` },
+      cache: "no-store",
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      console.error("LINK live pulse failed", { status: response.status, body });
+      return { due: true, ok: false, status: response.status, body };
+    }
+    return { due: true, ok: true, status: response.status, body };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("LINK live pulse invocation failed", { error: message });
+    return { due: true, ok: false, error: message };
+  }
+}
+
 async function updateScope(
   supabase: NonNullable<ReturnType<typeof getCentralSupabase>>,
   work: any,
@@ -38,6 +65,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "cron_auth_required" }, { status: 401 });
   }
 
+  const pulse = await runLivePulseIfDue(request);
+
   const supabase = getCentralSupabase();
   if (!supabase) {
     return NextResponse.json({ ok: false, error: "central_supabase_not_configured" }, { status: 503 });
@@ -55,7 +84,7 @@ export async function GET(request: NextRequest) {
 
   const work = Array.isArray(claimed) ? claimed[0] : null;
   if (!work) {
-    return NextResponse.json({ ok: true, attempted: 0, refresh, state: "idle" });
+    return NextResponse.json({ ok: true, attempted: 0, refresh, state: "idle", pulse });
   }
 
   try {
@@ -118,6 +147,7 @@ export async function GET(request: NextRequest) {
         attempt: work.attempt_count,
       },
       result,
+      pulse,
     });
   } catch (wakeError: any) {
     const errorMessage = wakeError?.message || "agent_wake_failed";
@@ -138,6 +168,7 @@ export async function GET(request: NextRequest) {
       attemptCount,
       maxAttempts,
       error: errorMessage,
+      pulse,
     });
 
     await supabase
