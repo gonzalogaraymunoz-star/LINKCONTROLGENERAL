@@ -52,3 +52,10 @@ Ninguna fase se declara completada por diseño o por una prueba local.
 Confirmar dominio y website piloto de producción; conceder permisos desde Meta/Google/Cloudflare/Zernio; verificar Ads addon si interesa; aprobar política de privacidad, CMP y despliegue. Los IDs externos, tokens y titularidad no están creados ni validados en este paquete.
 
 Constitución aplicable: docs/CONSTITUTION.md; no fake UI, permisos y evidencia.
+
+## Descubrimiento validado: Zernio Tracking Tags API (27-10-2026)
+Documentación oficial: https://docs.zernio.com/guides/pixels
+
+Zernio ofrece endpoint neutro por plataforma GET /v1/accounts/{accountId}/tracking-tags para **listar los Meta Pixels existentes**, leer código, diagnósticos, estadísticas, usuarios, socios y eventos, sujeto a permisos y conexión Ads. Requiere el accountId de la conexión publicitaria metaads; **NO** sirve pasar el accountId de Instagram o Facebook de publicación. Meta permite compartir píxeles con cuentas Ads si hay Business Manager propietario. Crear un píxel en Meta mediante Zernio NO es idempotente y Meta no permite eliminarlo por esa API: primero listar, comprobar titularidad, y crear solo tras aprobación. Nunca hacer reintentos ciegos de create.
+
+Zernio puede instalar etiquetas en Shopify/WordPress/Wix/Webflow conectados; esto NO sustituye el mecanismo Zaraz para nuestros sitios Cloudflare. Registrar en LINK Pixel source_adapter=zernio_tracking_tags cuando haya metaads autorizado y evitar integrar dos veces Meta con API directa. Usar diagnósticos reales del proveedor para estado verified. El plan/Addon Ads y la autorización continúan pendientes de verificar en la cuenta externa.
